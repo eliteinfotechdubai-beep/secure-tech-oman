@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(break)",
+      "Bash(lsof -nP -iTCP -sTCP:LISTEN)"
+    ]
+  }
+}
