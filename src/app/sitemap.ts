@@ -36,7 +36,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.7,
   }));
 
-  const productEntries: MetadataRoute.Sitemap = allProducts.map((product) => ({
+const productEntries: MetadataRoute.Sitemap = allProducts
+  .filter((product) => !/^prod-\d+$/.test(String(product.id)))
+  .map((product) => ({
     url: `${SITE_URL}/products/${product.id}`,
     lastModified: now,
     changeFrequency: "weekly",
