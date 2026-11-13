@@ -173,7 +173,7 @@ export function CategoryNav() {
       : categories;
   }, [categories]);
 
-  // Brands appears immediately after Storage.
+  // Brands appears first, before the main categories.
   const navItems = useMemo(() => {
     type NavItem =
       | {
@@ -184,7 +184,7 @@ export function CategoryNav() {
           type: "brand";
         };
 
-    const items: NavItem[] = mainCategories
+    const categoryItems: NavItem[] = mainCategories
       .filter(
         (category) =>
           category.handle !== "brands" &&
@@ -195,22 +195,10 @@ export function CategoryNav() {
         category,
       }));
 
-    const storageIndex = items.findIndex(
-      (item) =>
-        item.type === "category" &&
-        (item.category.handle === "storage" ||
-          item.category.title
-            .trim()
-            .toLowerCase() === "storage")
-    );
-
-    items.splice(
-      storageIndex >= 0
-        ? storageIndex + 1
-        : items.length,
-      0,
-      { type: "brand" }
-    );
+    const items: NavItem[] = [
+      { type: "brand" },
+      ...categoryItems,
+    ];
 
     return items;
   }, [mainCategories]);
