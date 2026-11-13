@@ -10,8 +10,6 @@ const nextConfig: NextConfig = {
       // src/middleware.ts instead, so the stale query param can be stripped.
       //
       // /categories/* was a separate static catalogue built on hardcoded sample data, with
-      // five slugs that never existed as Shopify collections. Point each at its real
-      // collection so existing links and indexed URLs keep working.
       {
         source: "/categories/storage-devices",
         destination: "/collections/storage",
