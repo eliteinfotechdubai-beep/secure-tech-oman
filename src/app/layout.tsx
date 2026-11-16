@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Figtree, Outfit } from "next/font/google";
 import { GoogleAnalytics } from "@next/third-parties/google";
+import { GoogleTagManager } from "@next/third-parties/google";
 import "./globals.css";
 import { TopBar } from "@/components/layout/header/top-bar";
 import { SiteHeader } from "@/components/layout/header/site-header";
@@ -79,6 +80,7 @@ const websiteJsonLd = {
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en" className={`${figtree.variable} ${outfit.variable} h-full antialiased`}>
+      <GoogleTagManager gtmId="GTM-TWD3XDQ8" />
       <body className="flex min-h-full flex-col" suppressHydrationWarning>
         <JsonLd data={organizationJsonLd} />
         <JsonLd data={websiteJsonLd} />
