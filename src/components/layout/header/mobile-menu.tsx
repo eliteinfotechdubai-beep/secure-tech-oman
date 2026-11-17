@@ -9,6 +9,9 @@ import { CONTACT, PHONE_HREF } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import { useProductSearch } from "@/hooks/use-product-search";
 import { pickProductImage } from "@/lib/product-image";
+// Brands section
+import { ChevronDown } from "lucide-react";
+import { BRAND_NAMES, getBrandHref } from "./brand-menu-data";
 
 interface ParentCategory {
   id: string;
@@ -23,6 +26,9 @@ export function MobileMenu() {
   const [searchTerm, setSearchTerm] = useState("");
   const [suggestionsOpen, setSuggestionsOpen] = useState(false);
   const { results: suggestions, isSearching } = useProductSearch(searchTerm, 6);
+
+  // Brands section (phones only).
+  const [brandsOpen, setBrandsOpen] = useState(false);
 
   useEffect(() => {
     async function fetchCategories() {
@@ -142,6 +148,42 @@ export function MobileMenu() {
             <Link href="/" onClick={() => setOpen(false)} className="rounded-md px-2 py-2.5 hover:bg-secondary">
               Home
             </Link>
+
+            {/* Brands (phones only; tablets and desktops use the Brands mega menu) */}
+            <div className="md:hidden">
+              <button
+                type="button"
+                onClick={() => setBrandsOpen((isOpen) => !isOpen)}
+                aria-expanded={brandsOpen}
+                aria-controls="mobile-brands"
+                className="flex w-full items-center justify-between rounded-md px-2 py-2.5 text-left uppercase hover:bg-secondary"
+              >
+                Brands
+                <ChevronDown
+                  className={cn("size-4 transition-transform", brandsOpen && "rotate-180")}
+                />
+              </button>
+
+              {brandsOpen && (
+                <div
+                  id="mobile-brands"
+                  className="mt-1 space-y-3 px-1 pb-2 font-normal normal-case tracking-normal"
+                >
+                  <div className="grid grid-cols-2 gap-2">
+                    {BRAND_NAMES.map((brand) => (
+                      <Link
+                        key={brand}
+                        href={getBrandHref(brand)}
+                        onClick={() => setOpen(false)}
+                        className="flex min-h-11 items-center rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-neutral-800 transition-colors hover:border-gray-300"
+                      >
+                        {brand}
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
             {categories.map((category) => (
               <Link
                 key={category.id}
