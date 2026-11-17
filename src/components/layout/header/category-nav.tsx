@@ -3,8 +3,19 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { ChevronRight, Menu } from "lucide-react";
+import { ArrowRight, ChevronRight, Menu } from "lucide-react";
 import { SUPPORT_LINK } from "@/lib/constants";
+import {
+  BRAND_NAMES,
+  DEFAULT_PREVIEW_BRAND,
+  buildBrandCollections,
+  buildBrandImages,
+  fetchFeaturedBrands,
+  getBrandHref,
+  getBrandLogo,
+  getBrandPreview,
+  type FeaturedBrand,
+} from "./brand-menu-data";
 import {
   useMemo,
   useRef,
@@ -40,58 +51,6 @@ type CategoryData = {
 const CATEGORIES_KEY = "__shop_by_category__";
 const BRAND_KEY = "__brands__";
 
-// All 28 brands.
-const BRAND_NAMES = [
-  "Hikvision",
-  "Dahua",
-  "UNV",
-  "Ezviz",
-  "IMOU",
-  "Uniarch",
-  "Ubiquiti",
-  "Ruijie",
-  "TP Link",
-  "Grandstream",
-  "Huawei",
-  "Cudy",
-  "Mercusys",
-  "Seagate",
-  "WD",
-  "Toshiba",
-  "Kingston",
-  "SanDisk",
-  "Lexar",
-  "Fyber",
-  "Tapo",
-  "Ring",
-  "Eufy",
-  "Anker",
-  "Soundcore",
-  "Garmin",
-  "Haing",
-  "Teklo",
-];
-
-// Display name to Shopify vendor mapping.
-const BRAND_VENDOR_NAMES: Record<string, string> = {
-  WD: "Western Digital",
-};
-
-// Display name to logo filename mapping.
-const BRAND_LOGO_FILES: Record<string, string> = {
-  "TP Link": "tp-link.webp",
-  WD: "wd.webp",
-};
-
-// Return logo file path.
-function getBrandLogo(brand: string) {
-  const filename =
-    BRAND_LOGO_FILES[brand] ??
-    `${brand.toLowerCase().replace(/\s+/g, "-")}.webp`;
-
-  return `/brands/${filename}`;
-}
-
 export function CategoryNav() {
   const [hoveredCategory, setHoveredCategory] =
     useState<string | null>(null);
@@ -115,6 +74,84 @@ export function CategoryNav() {
 
   const categoryDropdownRef =
     useRef<HTMLDivElement | null>(null);
+
+  // Brands mega menu: brand shown in the right preview panel.
+  const [previewBrand, setPreviewBrand] = useState(
+    DEFAULT_PREVIEW_BRAND
+  );
+
+  // Brand images from /api/featured-brands; null until first loaded.
+  const [featuredBrands, setFeaturedBrands] =
+    useState<FeaturedBrand[] | null>(null);
+
+  const brandsTriggerRef =
+    useRef<HTMLDivElement | null>(null);
+
+  // Pointer type of the last press, so touch taps can preview before navigating.
+  const lastPointerTypeRef = useRef<string | null>(null);
+
+  // Whether the Brands menu was already open when the current tap started.
+  const brandsOpenAtPressRef = useRef(false);
+
+  // Load brand images the first time the Brands menu opens.
+  useEffect(() => {
+    if (hoveredCategory !== BRAND_KEY || featuredBrands !== null) return;
+
+    let cancelled = false;
+
+    fetchFeaturedBrands()
+      .then((brands) => {
+        if (!cancelled) setFeaturedBrands(brands);
+      })
+      .catch(() => {
+        if (!cancelled) setFeaturedBrands([]);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [hoveredCategory, featuredBrands]);
+
+  // Close the Brands menu when tapping or clicking outside it.
+  useEffect(() => {
+    if (hoveredCategory !== BRAND_KEY) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as Node;
+
+      if (
+        categoryDropdownRef.current?.contains(target) ||
+        brandsTriggerRef.current?.contains(target)
+      ) {
+        return;
+      }
+
+      if (closeTimeoutRef.current) {
+        clearTimeout(closeTimeoutRef.current);
+        closeTimeoutRef.current = null;
+      }
+
+      setHoveredCategory(null);
+      setDropdownPosition(null);
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+
+    return () =>
+      document.removeEventListener("pointerdown", handlePointerDown);
+  }, [hoveredCategory]);
+
+  // Brand image by normalised name.
+  const brandImages = useMemo(
+    () => buildBrandImages(featuredBrands),
+    [featuredBrands]
+  );
+
+  // Brand-specific collections by normalised brand name.
+  const brandCollections = useMemo(
+    () => buildBrandCollections(categories),
+    [categories]
+  );
 
   // Keep dropdown inside viewport.
   useLayoutEffect(() => {
@@ -293,6 +330,12 @@ export function CategoryNav() {
       ? getCategoryData(hoveredCategory)
       : null;
 
+  // Brands preview panel content.
+  const {
+    image: previewImage,
+    description: previewDescription,
+  } = getBrandPreview(previewBrand, brandImages, brandCollections);
+
   // Loading skeleton.
   if (isLoading) {
     return (
@@ -354,17 +397,46 @@ export function CategoryNav() {
               return (
                 <div
                   key={BRAND_KEY}
+                  ref={brandsTriggerRef}
                   className="relative shrink-0"
-                  onMouseEnter={(e) =>
+                  onPointerDown={(e) => {
+                    lastPointerTypeRef.current = e.pointerType;
+                    brandsOpenAtPressRef.current =
+                      hoveredCategory === BRAND_KEY;
+                  }}
+                  onMouseEnter={(e) => {
+                    if (hoveredCategory !== BRAND_KEY) {
+                      setPreviewBrand(DEFAULT_PREVIEW_BRAND);
+                    }
+
                     openDropdown(
                       BRAND_KEY,
                       e.currentTarget
-                    )
-                  }
+                    );
+                  }}
                   onMouseLeave={scheduleClose}
                 >
                   <Link
                     href="/products"
+                    onClick={(e) => {
+                      const isTouch =
+                        lastPointerTypeRef.current === "touch";
+
+                      lastPointerTypeRef.current = null;
+
+                      // First tap on touch screens opens the menu instead of navigating.
+                      if (isTouch && !brandsOpenAtPressRef.current) {
+                        e.preventDefault();
+                        setPreviewBrand(DEFAULT_PREVIEW_BRAND);
+
+                        if (brandsTriggerRef.current) {
+                          openDropdown(
+                            BRAND_KEY,
+                            brandsTriggerRef.current
+                          );
+                        }
+                      }
+                    }}
                     className="cursor-pointer border-b-2 border-transparent px-1 py-2 transition-colors hover:border-brand-700 hover:text-brand-700"
                   >
                     Brands
@@ -614,14 +686,14 @@ export function CategoryNav() {
           document.body
         )}
 
-      {/* Brands mega menu - Logos and names */}
+      {/* Brands mega menu - logo grid with brand preview */}
       {hoveredCategory === BRAND_KEY &&
         dropdownPosition &&
         typeof document !== "undefined" &&
         createPortal(
           <div
             ref={categoryDropdownRef}
-            className="absolute z-50 max-h-[min(80vh,42rem)] w-[min(calc(100vw-2rem),64rem)] overflow-y-auto rounded-md border border-gray-200 bg-white p-5 shadow-xl"
+            className="absolute z-50 flex h-[min(80vh,36rem)] w-[min(calc(100vw-2rem),60rem)] overflow-hidden rounded-md border border-gray-200 bg-white shadow-xl"
             style={{
               top: dropdownPosition.top,
               left: dropdownPosition.left,
@@ -631,42 +703,128 @@ export function CategoryNav() {
           >
 
             {/* All 28 brand logos */}
-            <div className="grid grid-cols-4 gap-x-3 gap-y-5 lg:grid-cols-7">
+            <div className="min-w-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain p-4 lg:p-5">
+              <div className="grid grid-cols-3 gap-2.5 lg:grid-cols-4 lg:gap-3">
 
-              {BRAND_NAMES.map((brand) => {
-                const vendor =
-                  BRAND_VENDOR_NAMES[brand] ?? brand;
+                {BRAND_NAMES.map((brand) => {
+                  const isSelected = brand === previewBrand;
 
-                const logo = getBrandLogo(brand);
+                  return (
+                    <Link
+                      key={brand}
+                      href={getBrandHref(brand)}
+                      aria-current={isSelected ? "true" : undefined}
+                      onPointerEnter={(e) => {
+                        if (e.pointerType !== "touch") {
+                          setPreviewBrand(brand);
+                        }
+                      }}
+                      onFocus={(e) => {
+                        // Keyboard focus previews; touch focus is handled on tap.
+                        if (e.currentTarget.matches(":focus-visible")) {
+                          setPreviewBrand(brand);
+                        }
+                      }}
+                      onPointerDown={(e) => {
+                        lastPointerTypeRef.current = e.pointerType;
+                      }}
+                      onClick={(e) => {
+                        const isTouch =
+                          lastPointerTypeRef.current === "touch";
 
-                return (
-                  <Link
-                    key={brand}
-                    href={`/products?brand=${encodeURIComponent(vendor)}`}
-                    onClick={closeDropdown}
-                    className="group flex min-w-0 flex-col items-center gap-2 text-center"
-                  >
+                        lastPointerTypeRef.current = null;
 
-                    {/* Brand logo */}
-                    <div className="flex h-24 w-full items-center justify-center overflow-hidden rounded-xl border border-gray-100 bg-gray-50 p-2 transition-all duration-200 group-hover:border-blue-200 group-hover:bg-blue-50 group-hover:shadow-sm">
-                      <Image
-                        src={logo}
-                        alt={`${brand} logo`}
-                        width={140}
-                        height={90}
-                        unoptimized
-                        className="max-h-full max-w-full object-contain"
-                      />
-                    </div>
+                        // On touch screens the first tap previews the brand; a second tap opens its products.
+                        if (isTouch && !isSelected) {
+                          e.preventDefault();
+                          setPreviewBrand(brand);
+                          return;
+                        }
 
-                    {/* Brand name */}
-                    <span className="text-[13px] font-medium leading-tight text-gray-900 transition-colors group-hover:text-brand-700">
-                      {brand}
-                    </span>
-                  </Link>
-                );
-              })}
+                        closeDropdown();
+                      }}
+                      className={`group flex min-w-0 flex-col items-center gap-2 rounded-xl border bg-white p-2.5 text-center transition-all duration-200 ${
+                        isSelected
+                          ? "border-brand-500 ring-2 ring-blue-100"
+                          : "border-gray-200 hover:border-gray-300 hover:shadow-sm"
+                      }`}
+                    >
+
+                      {/* Brand logo */}
+                      <div className="flex h-14 w-full items-center justify-center lg:h-16">
+                        <Image
+                          src={getBrandLogo(brand)}
+                          alt={`${brand} logo`}
+                          width={140}
+                          height={90}
+                          unoptimized
+                          className="max-h-full max-w-full object-contain"
+                        />
+                      </div>
+
+                      {/* Brand name */}
+                      <span
+                        className={`w-full truncate text-[13px] font-medium leading-tight transition-colors ${
+                          isSelected
+                            ? "text-brand-700"
+                            : "text-gray-900 group-hover:text-brand-700"
+                        }`}
+                      >
+                        {brand}
+                      </span>
+                    </Link>
+                  );
+                })}
+              </div>
             </div>
+
+            {/* Brand preview */}
+            <aside className="flex w-60 shrink-0 flex-col gap-4 overflow-y-auto overscroll-contain bg-brand-700 p-5 text-white lg:w-80">
+              <div className="flex h-20 shrink-0 items-center justify-center rounded-lg bg-white p-3">
+                <Image
+                  key={previewBrand}
+                  src={getBrandLogo(previewBrand)}
+                  alt={`${previewBrand} logo`}
+                  width={180}
+                  height={80}
+                  unoptimized
+                  className="max-h-full max-w-full object-contain"
+                />
+              </div>
+
+              <div>
+                <h3 className="text-lg font-semibold leading-tight">
+                  {previewBrand}
+                </h3>
+
+                <p className="mt-1.5 text-[13px] leading-relaxed text-white/80">
+                  {previewDescription}
+                </p>
+              </div>
+
+              {/* Brand product image from Shopify, when one is set */}
+              {previewImage && (
+                <div className="relative aspect-[4/3] w-full shrink-0 overflow-hidden rounded-lg bg-white">
+                  <Image
+                    key={previewImage}
+                    src={previewImage}
+                    alt={`${previewBrand} products`}
+                    fill
+                    sizes="(min-width: 1024px) 280px, 200px"
+                    className="object-contain"
+                  />
+                </div>
+              )}
+
+              <Link
+                href={getBrandHref(previewBrand)}
+                onClick={closeDropdown}
+                className="mt-auto inline-flex shrink-0 items-center justify-center gap-2 rounded-md bg-white px-4 py-2.5 text-sm font-semibold text-brand-700 transition-colors hover:bg-blue-50"
+              >
+                Shop Brand
+                <ArrowRight className="size-4" />
+              </Link>
+            </aside>
           </div>,
           document.body
         )}
