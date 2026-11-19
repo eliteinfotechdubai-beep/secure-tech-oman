@@ -16,7 +16,7 @@ export function ImouSurveillance() {
               Professional IP surveillance cameras, NVRs and security systems for comprehensive monitoring.
             </p>
           </div>
-          <Link href="/products?brand=imou" className="hidden shrink-0 text-sm font-semibold text-brand-700 hover:text-brand-800 sm:block">
+          <Link href="/brands/imou" className="hidden shrink-0 text-sm font-semibold text-brand-700 hover:text-brand-800 sm:block">
             View All Products
           </Link>
         </div>
