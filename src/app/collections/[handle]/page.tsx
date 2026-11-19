@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
-import { Breadcrumb } from "@/components/layout/breadcrumb";
-import { JsonLd } from "@/components/seo/json-ld";
+import { Breadcrumb, type BreadcrumbItem } from "@/components/layout/breadcrumb";
 import { SITE_URL } from "@/lib/constants";
+import { findCategoryPath, getCategoryTree } from "@/lib/shopify/category-tree";
 import { getCollectionBottomContent, getCollectionByHandle } from "@/lib/shopify/shopify-products";
 import { seoDescription, seoTitle } from "@/lib/shopify/resolve-seo";
 import { ProductsPageClient } from "@/app/products/products-client";
@@ -47,33 +47,31 @@ export default async function CollectionPage({
   params: Promise<{ handle: string }>;
 }) {
   const { handle } = await params;
-  const [collection, bottomContent] = await Promise.all([
+  const [collection, bottomContent, categoryTree] = await Promise.all([
     loadCollection(handle),
     getCollectionBottomContent(handle),
+    // The cached tree the footer and menus already use: no extra Shopify request.
+    getCategoryTree().catch(() => null),
   ]);
   if (!collection) notFound();
 
-  const breadcrumbJsonLd = {
-    "@context": "https://schema.org",
-    "@type": "BreadcrumbList",
-    itemListElement: [
-      { "@type": "ListItem", position: 1, name: "Home", item: SITE_URL },
-      { "@type": "ListItem", position: 2, name: "Products", item: `${SITE_URL}/products` },
-      {
-        "@type": "ListItem",
-        position: 3,
-        name: collection.title,
-        item: `${SITE_URL}/collections/${handle}`,
-      },
-    ],
-  };
+  // Home / Root / Group / Leaf from the category tree. A collection outside the tree, or a
+  // tree that could not be loaded, falls back to Home / Products / Collection.
+  const categoryPath = categoryTree ? findCategoryPath(categoryTree, handle) : null;
+  const breadcrumbItems: BreadcrumbItem[] = categoryPath
+    ? categoryPath.map((category, index) => ({
+        // The page's own title for the last step, so it matches the heading exactly.
+        label: index === categoryPath.length - 1 ? collection.title : category.title,
+        href: `/collections/${category.handle}`,
+      }))
+    : [
+        { label: "Products", href: "/products" },
+        { label: collection.title, href: `/collections/${handle}` },
+      ];
 
   return (
     <>
-      <JsonLd data={breadcrumbJsonLd} />
-      <Breadcrumb
-        items={[{ label: "Products", href: "/products" }, { label: collection.title }]}
-      />
+      <Breadcrumb items={breadcrumbItems} />
       <Suspense fallback={null}>
         {/* The grid renders the visible <h1> from these, so this page has no separate one. */}
         <ProductsPageClient

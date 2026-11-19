@@ -7,6 +7,7 @@ import { ProductCard } from "@/components/product/product-card";
 import { SkeletonProductGrid } from "@/components/product/skeleton-product-grid";
 import { toDisplayProduct } from "@/lib/shopify/to-display-product";
 import { gaItem, trackEvent } from "@/lib/analytics";
+import { fetchOrganizedCategories } from "@/lib/category-tree-client";
 import type { Product } from "@/lib/data/types";
 import type { CollectionBottomContent } from "@/lib/shopify/shopify-types";
 
@@ -168,6 +169,11 @@ interface ProductsPageClientProps {
    * server-rendered page, where search engines read it, rather than arriving with the grid.
    */
   initialCollectionBottomContent?: CollectionBottomContent;
+  /**
+   * Set by /brands/[slug]: the Shopify vendor the grid starts filtered by. The path is the
+   * canonical way to scope the grid to a brand; ?brand= links redirect there.
+   */
+  initialBrand?: string;
 }
 
 export function ProductsPageClient({
@@ -175,12 +181,13 @@ export function ProductsPageClient({
   initialCollectionTitle,
   initialCollectionDescription,
   initialCollectionBottomContent,
+  initialBrand,
 }: ProductsPageClientProps = {}) {
   const searchParams = useSearchParams();
   const collectionParam = initialCollection ?? searchParams.get("collection");
   const searchQuery = searchParams.get("q") || "";
-  // Set by the brand cards on the homepage. Matched against Shopify's vendor field.
-  const brandParam = searchParams.get("brand") || "";
+  // Set by the brand pages, or by older ?brand= links. Matched against Shopify's vendor field.
+  const brandParam = initialBrand || searchParams.get("brand") || "";
   // Set by a homepage section's "View All Products" link. A homepage_sections handle.
   const sectionParam = searchParams.get("section") || "";
 
@@ -244,11 +251,7 @@ export function ProductsPageClient({
   useEffect(() => {
     async function fetchCategories() {
       try {
-        const response = await fetch("/api/collections/organized");
-        if (response.ok) {
-          const data = await response.json();
-          setCategories(data.data || []);
-        }
+        setCategories(await fetchOrganizedCategories());
       } catch (error) {
         console.error("Error fetching categories:", error);
       }
@@ -433,8 +436,8 @@ export function ProductsPageClient({
   const showCategoryHeader = !searchQuery && !selectedSection && Boolean(categoryTitle);
   const isDescriptionClamped =
     !!categoryDescription && categoryDescription.length > DESCRIPTION_CLAMP_LENGTH;
-  // The collection page hands over its <h1>; on /products the page keeps its own.
-  const CategoryHeading = initialCollection ? "h1" : "h2";
+  // The collection and brand pages hand over their <h1>; on /products the page keeps its own.
+  const CategoryHeading = initialCollection || initialBrand ? "h1" : "h2";
 
   const selectedCategoryTitle = searchQuery
     ? `Search results for "${searchQuery}"`

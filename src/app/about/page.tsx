@@ -11,7 +11,7 @@ export const metadata: Metadata = {
 export default function AboutPage() {
   return (
     <div className="min-h-screen bg-gray-50">
-      <Breadcrumb items={[{ label: "Home", href: "/" }, { label: "About Us" }]} />
+      <Breadcrumb items={[{ label: "About Us", href: "/about" }]} />
       <div className="mx-auto max-w-3xl px-8 lg:px-28 py-12">
         <h1 className="text-3xl font-bold text-gray-900 mb-6">About {SITE_NAME}</h1>
         <div className="space-y-4 text-gray-700 leading-relaxed">

@@ -1,3 +1,4 @@
+import { unstable_cache } from 'next/cache';
 import { shopifyFetch } from './shopify-client';
 
 export interface OrganizedCategory {
@@ -68,9 +69,62 @@ interface CollectionNode {
   order?: { value: string } | null;
 }
 
+// The footer (every page), /api/collections/organized (header, mobile menu, category nav,
+// product grid) and brand metadata all need this tree. Building it fresh for each of them
+// spent ~136 Shopify points several times per page view and got the site THROTTLED, so one
+// copy is shared for 5 minutes: admin edits to categories show up within that time.
+const CATEGORY_TREE_REVALIDATE_SECONDS = 300;
+
+const getCachedCategoryTree = unstable_cache(
+  async () => buildCategoryTree(await fetchAllCollections()),
+  ['category-tree'],
+  { revalidate: CATEGORY_TREE_REVALIDATE_SECONDS, tags: ['category-tree'] }
+);
+
+// The last tree this server built, served if Shopify is briefly unavailable.
+let lastGoodTree: OrganizedCategory[] | null = null;
+
 export async function getCategoryTree(): Promise<OrganizedCategory[]> {
-  const collections = await fetchAllCollections();
-  return buildCategoryTree(collections);
+  try {
+    const tree = await getCachedCategoryTree();
+    lastGoodTree = tree;
+    return tree;
+  } catch (error) {
+    if (lastGoodTree) {
+      console.warn('[category-tree] Shopify request failed; serving the last good tree.', error);
+      return lastGoodTree;
+    }
+    throw error;
+  }
+}
+
+/** Root-to-collection path for `handle`, or null when the collection is not in the tree. */
+export function findCategoryPath(
+  tree: OrganizedCategory[],
+  handle: string
+): OrganizedCategory[] | null {
+  for (const node of tree) {
+    if (node.handle === handle) return [node];
+    const below = findCategoryPath(node.subCategories, handle);
+    if (below) return [node, ...below];
+  }
+  return null;
+}
+
+/**
+ * The deepest path among a product's collections: its most specific category. Products sit
+ * in one root > group > leaf chain, so this is the leaf; on a tie the first collection wins.
+ */
+export function findDeepestCategoryPath(
+  tree: OrganizedCategory[],
+  handles: string[]
+): OrganizedCategory[] | null {
+  let deepest: OrganizedCategory[] | null = null;
+  for (const handle of handles) {
+    const path = findCategoryPath(tree, handle);
+    if (path && (!deepest || path.length > deepest.length)) deepest = path;
+  }
+  return deepest;
 }
 
 async function fetchAllCollections(): Promise<CollectionNode[]> {
