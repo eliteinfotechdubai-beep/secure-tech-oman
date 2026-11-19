@@ -1,3 +1,4 @@
+import { unstable_cache } from 'next/cache';
 import { shopifyFetch } from './shopify-client';
 
 export interface OrganizedCategory {
@@ -68,9 +69,33 @@ interface CollectionNode {
   order?: { value: string } | null;
 }
 
+// The footer (every page), /api/collections/organized (header, mobile menu, category nav,
+// product grid) and brand metadata all need this tree. Building it fresh for each of them
+// spent ~136 Shopify points several times per page view and got the site THROTTLED, so one
+// copy is shared for 5 minutes: admin edits to categories show up within that time.
+const CATEGORY_TREE_REVALIDATE_SECONDS = 300;
+
+const getCachedCategoryTree = unstable_cache(
+  async () => buildCategoryTree(await fetchAllCollections()),
+  ['category-tree'],
+  { revalidate: CATEGORY_TREE_REVALIDATE_SECONDS, tags: ['category-tree'] }
+);
+
+// The last tree this server built, served if Shopify is briefly unavailable.
+let lastGoodTree: OrganizedCategory[] | null = null;
+
 export async function getCategoryTree(): Promise<OrganizedCategory[]> {
-  const collections = await fetchAllCollections();
-  return buildCategoryTree(collections);
+  try {
+    const tree = await getCachedCategoryTree();
+    lastGoodTree = tree;
+    return tree;
+  } catch (error) {
+    if (lastGoodTree) {
+      console.warn('[category-tree] Shopify request failed; serving the last good tree.', error);
+      return lastGoodTree;
+    }
+    throw error;
+  }
 }
 
 async function fetchAllCollections(): Promise<CollectionNode[]> {

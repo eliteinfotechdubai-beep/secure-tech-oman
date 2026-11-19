@@ -7,6 +7,7 @@ import { ProductCard } from "@/components/product/product-card";
 import { SkeletonProductGrid } from "@/components/product/skeleton-product-grid";
 import { toDisplayProduct } from "@/lib/shopify/to-display-product";
 import { gaItem, trackEvent } from "@/lib/analytics";
+import { fetchOrganizedCategories } from "@/lib/category-tree-client";
 import type { Product } from "@/lib/data/types";
 import type { CollectionBottomContent } from "@/lib/shopify/shopify-types";
 
@@ -250,11 +251,7 @@ export function ProductsPageClient({
   useEffect(() => {
     async function fetchCategories() {
       try {
-        const response = await fetch("/api/collections/organized");
-        if (response.ok) {
-          const data = await response.json();
-          setCategories(data.data || []);
-        }
+        setCategories(await fetchOrganizedCategories());
       } catch (error) {
         console.error("Error fetching categories:", error);
       }

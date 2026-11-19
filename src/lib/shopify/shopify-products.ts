@@ -64,48 +64,81 @@ const PRODUCT_PAGE_SIZE = 250;
 
 export async function getAllProducts(limit?: number): Promise<ShopifyProduct[]> {
   const products: ShopifyProduct[] = [];
-  let after: string | null = null;
 
   try {
-    for (;;) {
-      const first =
-        limit === undefined
-          ? PRODUCT_PAGE_SIZE
-          : Math.min(PRODUCT_PAGE_SIZE, limit - products.length);
-      if (first <= 0) break;
-
-      const data = await shopifyFetch(GET_ALL_PRODUCTS, { first, after });
-      const connection = data.products;
-      if (!connection) break;
-
-      products.push(
-        ...connection.edges.map((edge: any) => {
-          const node = edge.node;
-          return {
-            id: node.id,
-            title: node.title,
-            handle: node.handle,
-            description: node.description,
-            vendor: node.vendor,
-            priceRange: node.priceRange,
-            featuredImage: node.featuredImage,
-            images: node.images?.edges?.map((img: any) => img.node) || [],
-            variants: node.variants?.edges?.map((v: any) => v.node) || [],
-            tags: node.tags || [],
-            collections: node.collections?.edges?.map((c: any) => c.node) || [],
-            metafields: mapMetafieldEdges(node.metafields?.edges),
-          } as ShopifyProduct;
-        })
-      );
-
-      if (!connection.pageInfo.hasNextPage) break;
-      after = connection.pageInfo.endCursor;
-    }
+    await collectAllProducts(products, limit);
   } catch (error) {
     console.error('Error fetching all products:', error);
   }
 
   return products;
+}
+
+// Product pages page through the whole catalogue (~830 Shopify points) only to pick a few
+// related products, which on its own nearly empties Shopify's 2,000-point bucket. This
+// process keeps one complete copy for 5 minutes and shares it between product pages.
+// A failed or partial fetch is never kept, so it cannot hide related products for long.
+const SHARED_PRODUCTS_TTL_MS = 5 * 60 * 1000;
+let sharedProducts: { fetchedAt: number; products: Promise<ShopifyProduct[]> } | null = null;
+
+export function getAllProductsShared(): Promise<ShopifyProduct[]> {
+  if (sharedProducts && Date.now() - sharedProducts.fetchedAt < SHARED_PRODUCTS_TTL_MS) {
+    return sharedProducts.products;
+  }
+
+  const entry = {
+    fetchedAt: Date.now(),
+    products: (async () => {
+      const products: ShopifyProduct[] = [];
+      await collectAllProducts(products);
+      return products;
+    })(),
+  };
+  sharedProducts = entry;
+  entry.products.catch(() => {
+    if (sharedProducts === entry) sharedProducts = null;
+  });
+  return entry.products;
+}
+
+// Pushes into `products` as pages arrive, so getAllProducts can keep what it had on failure.
+async function collectAllProducts(products: ShopifyProduct[], limit?: number): Promise<void> {
+  let after: string | null = null;
+
+  for (;;) {
+    const first =
+      limit === undefined
+        ? PRODUCT_PAGE_SIZE
+        : Math.min(PRODUCT_PAGE_SIZE, limit - products.length);
+    if (first <= 0) break;
+
+    const data = await shopifyFetch(GET_ALL_PRODUCTS, { first, after });
+    const connection = data.products;
+    if (!connection) break;
+
+    products.push(
+      ...connection.edges.map((edge: any) => {
+        const node = edge.node;
+        return {
+          id: node.id,
+          title: node.title,
+          handle: node.handle,
+          description: node.description,
+          vendor: node.vendor,
+          priceRange: node.priceRange,
+          featuredImage: node.featuredImage,
+          images: node.images?.edges?.map((img: any) => img.node) || [],
+          variants: node.variants?.edges?.map((v: any) => v.node) || [],
+          tags: node.tags || [],
+          collections: node.collections?.edges?.map((c: any) => c.node) || [],
+          metafields: mapMetafieldEdges(node.metafields?.edges),
+        } as ShopifyProduct;
+      })
+    );
+
+    if (!connection.pageInfo.hasNextPage) break;
+    after = connection.pageInfo.endCursor;
+  }
 }
 
 export async function getProductByHandle(handle: string): Promise<ShopifyProduct | null> {
@@ -134,7 +167,10 @@ export async function getProductByHandle(handle: string): Promise<ShopifyProduct
     } as ShopifyProduct;
   } catch (error) {
     console.error(`Error fetching product by handle ${handle}:`, error);
-    return null;
+    // Rethrown, not null: null means "Shopify has no such product" and the product page turns
+    // it into a 404 + noindex. A throttle or outage must not tell search engines that a live
+    // product was removed, so it surfaces as a server error (5xx, retried later) instead.
+    throw error;
   }
 }
 

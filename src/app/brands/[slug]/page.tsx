@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { unstable_cache } from "next/cache";
 import { notFound, permanentRedirect } from "next/navigation";
 import { Suspense } from "react";
 import { Breadcrumb } from "@/components/layout/breadcrumb";
@@ -19,13 +18,6 @@ import { ProductsPageClient } from "@/app/products/products-client";
 // Products are edited in the Shopify admin, so the product count (which decides indexing)
 // is read per request, like the collection pages.
 export const dynamic = "force-dynamic";
-
-// The category tree only feeds the description. It is one of the costliest Shopify queries
-// and the footer already runs it on every page, so brand pages reuse a copy for 10 minutes
-// rather than adding another full tree query to each visit.
-const getCachedCategoryTree = unstable_cache(getCategoryTree, ["brand-page-category-tree"], {
-  revalidate: 600,
-});
 
 type BrandPageProps = {
   params: Promise<{ slug: string }>;
@@ -55,7 +47,9 @@ export async function generateMetadata({ params }: BrandPageProps): Promise<Meta
   const vendor = getBrandVendor(brand);
   const [count, categories] = await Promise.all([
     getVendorProductCount(vendor),
-    getCachedCategoryTree().catch(() => []),
+    // The tree only feeds the description; getCategoryTree shares one cached copy with the
+    // footer and menus, so this adds no Shopify request of its own.
+    getCategoryTree().catch(() => []),
   ]);
 
   // Shopify collection description where one is set, otherwise a sentence built from the

@@ -1,18 +1,25 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { cache } from "react";
 import { Breadcrumb } from "@/components/layout/breadcrumb";
 import { JsonLd } from "@/components/seo/json-ld";
 import { pickProductImage } from "@/lib/product-image";
-import { getAllProducts, getProductByHandle } from "@/lib/shopify/shopify-products";
+import {
+  getAllProductsShared,
+  getProductByHandle as fetchProductByHandle,
+} from "@/lib/shopify/shopify-products";
 import { toDisplayProduct } from "@/lib/shopify/to-display-product";
 import { seoDescription, seoTitle, seoTitleText } from "@/lib/shopify/resolve-seo";
 import { SITE_URL } from "@/lib/constants";
 import { ProductDetailClient } from "./product-detail-client";
 
-export async function generateStaticParams() {
-  const products = await getAllProducts();
-  return products.map((product) => ({ id: product.handle }));
-}
+// generateMetadata and the page both need the product; one Shopify request per page view.
+const getProductByHandle = cache(fetchProductByHandle);
+
+// No generateStaticParams: the root layout renders every page per request (see
+// category-sitemap.tsx), so the build threw away all ~742 product prerenders anyway — after
+// spending thousands of Shopify requests on them and throttling the API bucket the live site
+// shares. Every handle is rendered on demand, exactly as it already was in production.
 
 export async function generateMetadata({
   params,
@@ -62,7 +69,14 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
 
   // Related products: other products from the same vendor (products without a vendor get none).
   const vendor = shopifyProduct.vendor?.trim().toLowerCase();
-  const allProducts = vendor ? await getAllProducts() : [];
+  // Shared catalogue copy (see getAllProductsShared); on failure the page shows no related
+  // products, as before.
+  const allProducts = vendor
+    ? await getAllProductsShared().catch((error) => {
+        console.error("Error fetching related products:", error);
+        return [];
+      })
+    : [];
   const relatedProducts = allProducts
     .filter((p) => p.handle !== id && p.vendor?.trim().toLowerCase() === vendor)
     .slice(0, 6)

@@ -16,30 +16,17 @@ const GET_PRODUCT_VENDORS = `
   }
 `;
 
-// Waits before retrying a request Shopify throttled. The build prerenders hundreds of
-// pages against the same API bucket, so a first attempt there is often throttled.
-const THROTTLE_RETRY_DELAYS_MS = [1000, 2000, 4000];
-
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-// Null when Shopify cannot be reached, after retrying throttled attempts.
+// Null when Shopify cannot be reached. Throttled attempts are already retried inside
+// shopifyFetch, so this only turns the final failure into null.
 async function fetchWithThrottleRetry<T>(
   label: string,
   request: () => Promise<T>
 ): Promise<T | null> {
-  for (let attempt = 0; ; attempt++) {
-    try {
-      return await request();
-    } catch (error) {
-      const throttled = error instanceof Error && error.message.includes('THROTTLED');
-      if (throttled && attempt < THROTTLE_RETRY_DELAYS_MS.length) {
-        await sleep(THROTTLE_RETRY_DELAYS_MS[attempt]);
-        continue;
-      }
-
-      console.error(`Error fetching ${label}:`, error);
-      return null;
-    }
+  try {
+    return await request();
+  } catch (error) {
+    console.error(`Error fetching ${label}:`, error);
+    return null;
   }
 }
 
