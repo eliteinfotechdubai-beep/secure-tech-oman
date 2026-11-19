@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { notFound, permanentRedirect } from "next/navigation";
 import { Suspense } from "react";
 import { Breadcrumb } from "@/components/layout/breadcrumb";
-import { JsonLd } from "@/components/seo/json-ld";
 import { SITE_URL } from "@/lib/constants";
 import { getCategoryTree } from "@/lib/shopify/category-tree";
 import { getVendorProductCount } from "@/lib/shopify/brand-products";
@@ -84,25 +83,15 @@ export default async function BrandPage({ params, searchParams }: BrandPageProps
 
   const vendor = getBrandVendor(brand);
 
-  const breadcrumbJsonLd = {
-    "@context": "https://schema.org",
-    "@type": "BreadcrumbList",
-    itemListElement: [
-      { "@type": "ListItem", position: 1, name: "Home", item: SITE_URL },
-      { "@type": "ListItem", position: 2, name: "Products", item: `${SITE_URL}/products` },
-      {
-        "@type": "ListItem",
-        position: 3,
-        name: vendor,
-        item: `${SITE_URL}/brands/${canonicalSlug}`,
-      },
-    ],
-  };
-
   return (
     <>
-      <JsonLd data={breadcrumbJsonLd} />
-      <Breadcrumb items={[{ label: "Products", href: "/products" }, { label: vendor }]} />
+      {/* Home / Products / Brand: visible trail and BreadcrumbList come from this one list. */}
+      <Breadcrumb
+        items={[
+          { label: "Products", href: "/products" },
+          { label: vendor, href: `/brands/${canonicalSlug}` },
+        ]}
+      />
       <Suspense fallback={null}>
         {/* The grid renders the visible <h1> (the brand name), so this page has no separate one. */}
         <ProductsPageClient initialBrand={vendor} />

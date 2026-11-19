@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { cache } from "react";
-import { Breadcrumb } from "@/components/layout/breadcrumb";
+import { Breadcrumb, type BreadcrumbItem } from "@/components/layout/breadcrumb";
 import { JsonLd } from "@/components/seo/json-ld";
 import { pickProductImage } from "@/lib/product-image";
 import {
@@ -9,6 +9,7 @@ import {
   getProductByHandle as fetchProductByHandle,
 } from "@/lib/shopify/shopify-products";
 import { toDisplayProduct } from "@/lib/shopify/to-display-product";
+import { findDeepestCategoryPath, getCategoryTree } from "@/lib/shopify/category-tree";
 import { seoDescription, seoTitle, seoTitleText } from "@/lib/shopify/resolve-seo";
 import { SITE_URL } from "@/lib/constants";
 import { ProductDetailClient } from "./product-detail-client";
@@ -98,23 +99,31 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
       : {}),
   };
 
-  const breadcrumbJsonLd = {
-    "@context": "https://schema.org",
-    "@type": "BreadcrumbList",
-    itemListElement: [
-      { "@type": "ListItem", position: 1, name: "Home", item: SITE_URL },
-      { "@type": "ListItem", position: 2, name: "Products", item: `${SITE_URL}/products` },
-      { "@type": "ListItem", position: 3, name: product.name, item: `${SITE_URL}/products/${product.id}` },
-    ],
-  };
+  // Home / Root / Group / Leaf / Product from the product's most specific collection in the
+  // cached category tree (no extra Shopify request: the product query already returns its
+  // collections). Products in no collection, or a tree that could not be loaded, keep
+  // Home / Products / Product.
+  const categoryTree = await getCategoryTree().catch(() => null);
+  const categoryPath = categoryTree
+    ? findDeepestCategoryPath(
+        categoryTree,
+        (shopifyProduct.collections ?? []).map((collection) => collection.handle)
+      )
+    : null;
+  const breadcrumbItems: BreadcrumbItem[] = [
+    ...(categoryPath
+      ? categoryPath.map((category) => ({
+          label: category.title,
+          href: `/collections/${category.handle}`,
+        }))
+      : [{ label: "Products", href: "/products" }]),
+    { label: product.name, href: `/products/${product.id}` },
+  ];
 
   return (
     <>
       <JsonLd data={productJsonLd} />
-      <JsonLd data={breadcrumbJsonLd} />
-      <Breadcrumb
-        items={[{ label: "Home", href: "/" }, { label: "Products", href: "/products" }, { label: product.name }]}
-      />
+      <Breadcrumb items={breadcrumbItems} />
       <ProductDetailClient product={product} relatedProducts={relatedProducts} />
     </>
   );

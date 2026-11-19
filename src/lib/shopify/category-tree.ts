@@ -98,6 +98,35 @@ export async function getCategoryTree(): Promise<OrganizedCategory[]> {
   }
 }
 
+/** Root-to-collection path for `handle`, or null when the collection is not in the tree. */
+export function findCategoryPath(
+  tree: OrganizedCategory[],
+  handle: string
+): OrganizedCategory[] | null {
+  for (const node of tree) {
+    if (node.handle === handle) return [node];
+    const below = findCategoryPath(node.subCategories, handle);
+    if (below) return [node, ...below];
+  }
+  return null;
+}
+
+/**
+ * The deepest path among a product's collections: its most specific category. Products sit
+ * in one root > group > leaf chain, so this is the leaf; on a tie the first collection wins.
+ */
+export function findDeepestCategoryPath(
+  tree: OrganizedCategory[],
+  handles: string[]
+): OrganizedCategory[] | null {
+  let deepest: OrganizedCategory[] | null = null;
+  for (const handle of handles) {
+    const path = findCategoryPath(tree, handle);
+    if (path && (!deepest || path.length > deepest.length)) deepest = path;
+  }
+  return deepest;
+}
+
 async function fetchAllCollections(): Promise<CollectionNode[]> {
   const collections: CollectionNode[] = [];
   let after: string | null = null;
