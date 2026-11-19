@@ -51,6 +51,9 @@ type CategoryData = {
 const CATEGORIES_KEY = "__shop_by_category__";
 const BRAND_KEY = "__brands__";
 
+// Shop By Category items that open their collection directly, without a right-side submenu.
+const NO_SUBMENU_HANDLES = ["it-server-solutions"];
+
 export function CategoryNav() {
   const [hoveredCategory, setHoveredCategory] =
     useState<string | null>(null);
@@ -256,7 +259,11 @@ export function CategoryNav() {
     categories.find(
       (category) =>
         category.handle === activeRootHandle
-    ) ?? categories[0];
+    ) ??
+    categories.find(
+      (category) =>
+        !NO_SUBMENU_HANDLES.includes(category.handle)
+    );
 
   const clearCloseTimeout = () => {
     if (closeTimeoutRef.current) {
@@ -524,6 +531,25 @@ export function CategoryNav() {
                 const isSelected =
                   selectedRoot?.handle ===
                   category.handle;
+
+                // No right-side submenu: the item opens its collection page.
+                if (NO_SUBMENU_HANDLES.includes(category.handle)) {
+                  return (
+                    <li key={category.id}>
+                      <Link
+                        href={`/collections/${category.handle}`}
+                        onClick={closeDropdown}
+                        className="flex w-full cursor-pointer items-center justify-between gap-2 border-b border-gray-200 py-3 text-left text-[14px] text-[#222222] transition-colors hover:text-brand-700"
+                      >
+                        <span className="min-w-0 truncate">
+                          {category.title}
+                        </span>
+
+                        <ChevronRight className="size-4 shrink-0 text-neutral-500" />
+                      </Link>
+                    </li>
+                  );
+                }
 
                 return (
                   <li key={category.id}>
