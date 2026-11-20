@@ -95,11 +95,56 @@ export function brandKey(name: string) {
   return name.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
-// Existing product listing for a brand.
-export function getBrandHref(brand: string) {
-  const vendor = BRAND_VENDOR_NAMES[brand] ?? brand;
+// URL slug for a brand page, where it differs from the display name.
+const BRAND_SLUGS: Record<string, string> = {
+  WD: "western-digital",
+};
 
-  return `/products?brand=${encodeURIComponent(vendor)}`;
+// Old brand page slugs that permanently redirect to the brand's current slug.
+const BRAND_SLUG_ALIASES: Record<string, string> = {
+  wd: "western-digital",
+};
+
+// Shopify vendor name a brand's products are filtered by.
+export function getBrandVendor(brand: string) {
+  return BRAND_VENDOR_NAMES[brand] ?? brand;
+}
+
+// Lowercase, hyphenated slug for /brands/<slug>, e.g. "TP Link" -> "tp-link".
+export function getBrandSlug(brand: string) {
+  return (
+    BRAND_SLUGS[brand] ??
+    brand
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+  );
+}
+
+// Brand for a /brands/<slug> segment: its slug or an old alias, in any letter case.
+export function findBrandBySlug(slug: string) {
+  const normalised = slug.toLowerCase();
+  const target = BRAND_SLUG_ALIASES[normalised] ?? normalised;
+
+  return BRAND_NAMES.find((brand) => getBrandSlug(brand) === target);
+}
+
+// Brand a name refers to: its display name, Shopify vendor or featured_brands name,
+// ignoring case and punctuation ("western Digital" -> WD, "Hang" -> Haing).
+export function findBrandByName(name: string) {
+  const key = brandKey(name);
+  if (!key) return undefined;
+
+  return BRAND_NAMES.find((brand) =>
+    [brand, BRAND_VENDOR_NAMES[brand], BRAND_IMAGE_NAMES[brand]].some(
+      (candidate) => candidate !== undefined && brandKey(candidate) === key
+    )
+  );
+}
+
+// Brand landing page.
+export function getBrandHref(brand: string) {
+  return `/brands/${getBrandSlug(brand)}`;
 }
 
 // Loads the featured_brands entries; an empty list when the route fails.
@@ -147,10 +192,12 @@ export function buildBrandCollections(categories: BrandSourceCategory[]) {
 }
 
 // Preview panel content for a brand, matched by display name or Shopify vendor name.
+// `label` is the name used in the generated description; the brand pages pass the vendor.
 export function getBrandPreview(
   brand: string,
   brandImages: Map<string, string>,
-  brandCollections: Map<string, BrandCollection[]>
+  brandCollections: Map<string, BrandCollection[]>,
+  label: string = brand
 ) {
   const keys = [
     brandKey(brand),
@@ -181,10 +228,10 @@ export function getBrandPreview(
       .find((item) => item.description?.trim())
       ?.description?.trim() ??
     (categoryTitles.length === 0
-      ? `Browse all ${brand} products available at ${SITE_NAME}.`
+      ? `Browse all ${label} products available at ${SITE_NAME}.`
       : categoryTitles.length > 3
-        ? `Shop ${brand} ${categoryTitles.slice(0, 3).join(", ")} and more at ${SITE_NAME}.`
-        : `Shop ${brand} ${categoryTitles
+        ? `Shop ${label} ${categoryTitles.slice(0, 3).join(", ")} and more at ${SITE_NAME}.`
+        : `Shop ${label} ${categoryTitles
             .join(", ")
             .replace(/, ([^,]*)$/, " and $1")} at ${SITE_NAME}.`);
 

@@ -11,7 +11,7 @@ export const metadata: Metadata = {
 export default function ShippingPage() {
   return (
     <div className="min-h-screen bg-gray-50">
-      <Breadcrumb items={[{ label: "Home", href: "/" }, { label: "Shipping & Cancellation" }]} />
+      <Breadcrumb items={[{ label: "Shipping & Cancellation", href: "/shipping" }]} />
       <div className="mx-auto max-w-3xl px-8 lg:px-28 py-12">
         <h1 className="text-3xl font-bold text-gray-900 mb-6">Shipping &amp; Cancellation</h1>
         <div className="space-y-4 text-gray-700 leading-relaxed">

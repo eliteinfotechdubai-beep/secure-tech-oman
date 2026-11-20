@@ -2,6 +2,9 @@ import type { MetadataRoute } from "next";
 import { allProducts } from "@/lib/data/products";
 import { getAllCollectionHandles } from "@/lib/shopify/shopify-products";
 import { SITE_URL } from "@/lib/constants";
+// Brand pages
+import { getProductVendors } from "@/lib/shopify/brand-products";
+import { BRAND_NAMES, getBrandHref, getBrandVendor } from "@/components/layout/header/brand-menu-data";
 
 const STATIC_ROUTES: Array<{ path: string; changeFrequency: MetadataRoute.Sitemap[number]["changeFrequency"]; priority: number }> = [
   { path: "/", changeFrequency: "weekly", priority: 1 },
@@ -26,6 +29,19 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: route.priority,
   }));
 
+  // Only brand pages that list products: a brand is in when Shopify has products under its
+  // vendor name. Empty brands are noindex, so they join once they have products and the
+  // sitemap is regenerated. If Shopify cannot be reached, brand URLs are left out this time.
+  const vendors = new Set(((await getProductVendors()) ?? []).map((vendor) => vendor.toLowerCase()));
+  const brandEntries: MetadataRoute.Sitemap = BRAND_NAMES
+    .filter((brand) => vendors.has(getBrandVendor(brand).toLowerCase()))
+    .map((brand) => ({
+      url: `${SITE_URL}${getBrandHref(brand)}`,
+      lastModified: now,
+      changeFrequency: "weekly",
+      priority: 0.7,
+    }));
+
   // Every Shopify collection gets a /collections/[handle] page. If Shopify is unreachable
   // this comes back empty and the sitemap is still served, just without collection URLs.
   const handles = await getAllCollectionHandles();
@@ -45,5 +61,5 @@ const productEntries: MetadataRoute.Sitemap = allProducts
     priority: 0.6,
   }));
 
-  return [...staticEntries, ...collectionEntries, ...productEntries];
+  return [...staticEntries, ...brandEntries, ...collectionEntries, ...productEntries];
 }

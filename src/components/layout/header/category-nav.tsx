@@ -5,6 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { ArrowRight, ChevronRight, Menu } from "lucide-react";
 import { SUPPORT_LINK } from "@/lib/constants";
+import { fetchOrganizedCategories } from "@/lib/category-tree-client";
 import {
   BRAND_NAMES,
   DEFAULT_PREVIEW_BRAND,
@@ -180,15 +181,7 @@ export function CategoryNav() {
   useEffect(() => {
     async function fetchCategories() {
       try {
-        const response = await fetch(
-          "/api/collections/organized"
-        );
-
-        if (response.ok) {
-          const data = await response.json();
-
-          setCategories(data.data || []);
-        }
+        setCategories(await fetchOrganizedCategories());
       } catch (error) {
         console.error(
           "Error fetching categories:",
