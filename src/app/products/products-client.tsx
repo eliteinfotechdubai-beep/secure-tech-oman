@@ -676,34 +676,38 @@ export function ProductsPageClient({
               </div>
             )}
 
-            {/* Pagination */}
+            {/* Pagination. One row of Previous / 1-5 / Next was ~450px wide, wider than a phone,
+                so on small screens the page numbers get their own row with Previous and Next
+                below it. From `sm` up the `sm:` classes restore the original single row. */}
             {totalPages > 1 && (
-              <div className="mt-8 flex items-center justify-center gap-2">
+              <div className="mt-8 flex flex-wrap items-center justify-center gap-2">
                 <button
                   onClick={() => goToPage(safePage - 1)}
                   disabled={safePage === 1}
-                  className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-100 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-white"
+                  className="order-2 sm:order-none px-4 py-2 border border-gray-300 rounded hover:bg-gray-100 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-white"
                 >
                   Previous
                 </button>
-                {getPageNumbers(safePage, totalPages).map((page) => (
-                  <button
-                    key={page}
-                    onClick={() => goToPage(page)}
-                    aria-current={page === safePage ? "page" : undefined}
-                    className={`px-4 py-2 rounded cursor-pointer ${
-                      page === safePage
-                        ? "bg-brand-gradient text-white"
-                        : "border border-gray-300 hover:bg-gray-100"
-                    }`}
-                  >
-                    {page}
-                  </button>
-                ))}
+                <div className="order-1 flex w-full flex-wrap items-center justify-center gap-2 sm:order-none sm:w-auto">
+                  {getPageNumbers(safePage, totalPages).map((page) => (
+                    <button
+                      key={page}
+                      onClick={() => goToPage(page)}
+                      aria-current={page === safePage ? "page" : undefined}
+                      className={`px-3 sm:px-4 py-2 rounded cursor-pointer ${
+                        page === safePage
+                          ? "bg-brand-gradient text-white"
+                          : "border border-gray-300 hover:bg-gray-100"
+                      }`}
+                    >
+                      {page}
+                    </button>
+                  ))}
+                </div>
                 <button
                   onClick={() => goToPage(safePage + 1)}
                   disabled={safePage === totalPages}
-                  className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-100 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-white"
+                  className="order-3 sm:order-none px-4 py-2 border border-gray-300 rounded hover:bg-gray-100 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-white"
                 >
                   Next
                 </button>
