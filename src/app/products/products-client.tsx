@@ -10,6 +10,7 @@ import { gaItem, trackEvent } from "@/lib/analytics";
 import { fetchOrganizedCategories } from "@/lib/category-tree-client";
 import type { Product } from "@/lib/data/types";
 import type { CollectionBottomContent } from "@/lib/shopify/shopify-types";
+import { categoryLabel, findBrandCategory } from "@/components/layout/header/brand-menu-data";
 
 type ViewMode = "grid-2" | "grid-3" | "grid-4" | "list";
 
@@ -28,6 +29,8 @@ function getPageNumbers(currentPage: number, totalPages: number): number[] {
 interface Category {
   id: string;
   title: string;
+  /** Short label for the filter tree; see OrganizedCategory.menuTitle. */
+  menuTitle?: string;
   handle: string;
   description?: string;
   subCategories: Category[];
@@ -44,21 +47,6 @@ function findCategoryPath(categories: Category[], handle: string): Category[] {
     if (below.length > 0) return [category, ...below];
   }
   return [];
-}
-
-// Brand cards filter by Shopify's vendor field, which is a name rather than a handle, so
-// the collection mirroring that brand is found by title. The two are maintained
-// separately in the admin and their casing drifts ("IMOU" the vendor, "Imou" the
-// collection), so the comparison ignores it.
-function findCategoryByTitle(categories: Category[], title: string): Category | undefined {
-  const target = title.trim().toLowerCase();
-
-  for (const category of categories) {
-    if (category.title.trim().toLowerCase() === target) return category;
-    const match = findCategoryByTitle(category.subCategories ?? [], title);
-    if (match) return match;
-  }
-  return undefined;
 }
 
 // Past this, a Shopify description is long enough to push the grid below the fold, so it
@@ -113,14 +101,16 @@ function CategoryFilterItem({
               depth === 0 ? "text-gray-700 font-medium" : "text-gray-600 text-sm"
             }`}
           >
-            {category.title}
+            {categoryLabel(category)}
           </span>
         </label>
         {hasSubCategories && (
           <button
             type="button"
             onClick={() => onToggle(category.handle)}
-            aria-label={isExpanded ? `Collapse ${category.title}` : `Expand ${category.title}`}
+            aria-label={
+              isExpanded ? `Collapse ${categoryLabel(category)}` : `Expand ${categoryLabel(category)}`
+            }
             aria-expanded={isExpanded}
             className="shrink-0 p-1 text-gray-400 hover:text-gray-700 cursor-pointer"
           >
@@ -407,16 +397,23 @@ export function ProductsPageClient({
   const selectedCategoryNode = selectedCategoryPath[selectedCategoryPath.length - 1];
 
   // A brand card narrows the grid by vendor, but nearly every brand is also a collection
-  // in the tree - "IMOU" sits under CCTV & Security Cameras. Pairing them by title lets a
-  // brand-filtered grid carry the same heading and description as that collection.
+  // in the tree - "IMOU" sits under CCTV & Security Cameras. Pairing them by the brand
+  // label (not the full "IMOU CCTV & Security Cameras" title) lets a brand-filtered grid
+  // carry that collection's brand name and description.
   const brandCategory = useMemo(
-    () => (selectedBrand ? findCategoryByTitle(categories, selectedBrand) : undefined),
+    () => (selectedBrand ? findBrandCategory(categories, selectedBrand) : undefined),
     [categories, selectedBrand]
   );
 
   // Whichever category the heading is describing. Brand and category filters replace one
   // another, so only one of these is ever set.
   const headingCategory = selectedBrand ? brandCategory : selectedCategoryNode;
+  // A brand page is headed by the brand ("IMOU"); a collection page by its full title.
+  const headingTitle = headingCategory
+    ? selectedBrand
+      ? categoryLabel(headingCategory)
+      : headingCategory.title
+    : undefined;
 
   // Until the tree arrives, a collection page can still name the category it was rendered
   // for. Once another category is picked, that server-supplied fallback no longer applies.
@@ -428,7 +425,7 @@ export function ProductsPageClient({
   const fallbackDescription =
     !selectedBrand && isInitialCollection ? initialCollectionDescription : undefined;
 
-  const categoryTitle = headingCategory?.title ?? fallbackTitle;
+  const categoryTitle = headingTitle ?? fallbackTitle;
   const categoryDescription = (headingCategory?.description ?? fallbackDescription)?.trim();
 
   // A search, or a homepage section, is showing something assembled from across the

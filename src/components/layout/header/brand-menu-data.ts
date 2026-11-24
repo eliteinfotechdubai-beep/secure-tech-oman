@@ -85,10 +85,36 @@ export type BrandCollection = {
 // The part of a /api/collections/organized category the brand preview reads.
 export type BrandSourceCategory = {
   title: string;
+  /** Short label from the category tree: "IMOU" for "IMOU Recorders & NVR". */
+  menuTitle?: string;
   handle: string;
   description?: string;
   subCategories?: BrandSourceCategory[];
 };
+
+// Name shown in menus, filters and intermediate breadcrumbs. Falls back to the title for
+// a tree served before `menuTitle` existed.
+export function categoryLabel(category: { title: string; menuTitle?: string }) {
+  return category.menuTitle ?? category.title;
+}
+
+// The collection mirroring a brand: the first, depth first, whose label matches the brand
+// or vendor name, ignoring case. Brand collections are titled "<Brand> <Parent>" or just
+// "<Brand>", and the label is "<Brand>" either way.
+export function findBrandCategory(
+  categories: BrandSourceCategory[],
+  name: string
+): BrandSourceCategory | undefined {
+  const target = name.trim().toLowerCase();
+  if (!target) return undefined;
+
+  for (const category of categories) {
+    if (categoryLabel(category).trim().toLowerCase() === target) return category;
+    const match = findBrandCategory(category.subCategories ?? [], name);
+    if (match) return match;
+  }
+  return undefined;
+}
 
 // Normalise names so "TP-Link" matches "TP Link" and "kingston" matches "Kingston".
 export function brandKey(name: string) {
@@ -169,13 +195,14 @@ export function buildBrandImages(featuredBrands: FeaturedBrand[] | null) {
   return images;
 }
 
-// Brand-specific collections by normalised brand name.
+// Brand-specific collections by normalised brand name, keyed by the label so "IMOU" and
+// "IMOU Recorders & NVR" both count as IMOU.
 export function buildBrandCollections(categories: BrandSourceCategory[]) {
   const collections = new Map<string, BrandCollection[]>();
 
   for (const root of categories) {
     for (const child of root.subCategories ?? []) {
-      const key = brandKey(child.title);
+      const key = brandKey(categoryLabel(child));
       const list = collections.get(key) ?? [];
 
       list.push({
