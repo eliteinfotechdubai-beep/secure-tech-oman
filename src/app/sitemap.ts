@@ -1,10 +1,15 @@
 import type { MetadataRoute } from "next";
 import { allProducts } from "@/lib/data/products";
+import { imouProducts } from "@/lib/data/imou-products";
 import { getAllCollectionHandles } from "@/lib/shopify/shopify-products";
 import { SITE_URL } from "@/lib/constants";
 // Brand pages
 import { getProductVendors } from "@/lib/shopify/brand-products";
 import { BRAND_NAMES, getBrandHref, getBrandVendor } from "@/components/layout/header/brand-menu-data";
+
+// The old hardcoded IMOU records use handles Shopify never had, so their URLs 404 or
+// redirect (see next.config.ts) and must stay out of the sitemap.
+const RETIRED_PRODUCT_IDS = new Set(imouProducts.map((product) => String(product.id)));
 
 const STATIC_ROUTES: Array<{ path: string; changeFrequency: MetadataRoute.Sitemap[number]["changeFrequency"]; priority: number }> = [
   { path: "/", changeFrequency: "weekly", priority: 1 },
@@ -53,7 +58,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   }));
 
 const productEntries: MetadataRoute.Sitemap = allProducts
-  .filter((product) => !/^prod-\d+$/.test(String(product.id)))
+  .filter((product) => !/^prod-\d+$/.test(String(product.id)) && !RETIRED_PRODUCT_IDS.has(String(product.id)))
   .map((product) => ({
     url: `${SITE_URL}/products/${product.id}`,
     lastModified: now,
