@@ -1,4 +1,5 @@
 import { Fragment } from "react";
+import type { Metadata } from "next";
 import { GET as getHomepageSections, type HomePageSection } from "@/app/api/homepage-sections/route";
 import { getProductsByQuery } from "@/lib/shopify/shopify-products";
 import { toDisplayProduct } from "@/lib/shopify/to-display-product";
@@ -8,6 +9,11 @@ import { ShopByCategory } from "@/components/homepage/shop-by-category/shop-by-c
 import { ProductSection } from "@/components/homepage/product-section/product-section";
 import { PromoBanners } from "@/components/homepage/promo-banners/promo-banners";
 import { FeaturedProducts } from "@/components/homepage/featured-products/featured-products";
+import { SITE_URL } from "@/lib/constants";
+
+export const metadata: Metadata = {
+  alternates: { canonical: `${SITE_URL}/` },
+};
 
 export default async function HomePage() {
   const homepageSectionsRes = await getHomepageSections();
