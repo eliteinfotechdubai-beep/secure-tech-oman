@@ -60,8 +60,9 @@ export default async function CollectionPage({
   const categoryPath = categoryTree ? findCategoryPath(categoryTree, handle) : null;
   const breadcrumbItems: BreadcrumbItem[] = categoryPath
     ? categoryPath.map((category, index) => ({
-        // The page's own title for the last step, so it matches the heading exactly.
-        label: index === categoryPath.length - 1 ? collection.title : category.title,
+        // The page's own title for the last step, so it matches the heading exactly; the
+        // short label for the steps above it ("Recorders & NVR / IMOU / IMOU Wired NVR").
+        label: index === categoryPath.length - 1 ? collection.title : category.menuTitle,
         href: `/collections/${category.handle}`,
       }))
     : [

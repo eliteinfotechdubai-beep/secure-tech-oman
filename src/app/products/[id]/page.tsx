@@ -113,7 +113,8 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
   const breadcrumbItems: BreadcrumbItem[] = [
     ...(categoryPath
       ? categoryPath.map((category) => ({
-          label: category.title,
+          // Short labels: each step already sits under its parent ("Recorders & NVR / IMOU").
+          label: category.menuTitle,
           href: `/collections/${category.handle}`,
         }))
       : [{ label: "Products", href: "/products" }]),

@@ -11,6 +11,7 @@ import {
   DEFAULT_PREVIEW_BRAND,
   buildBrandCollections,
   buildBrandImages,
+  categoryLabel,
   fetchFeaturedBrands,
   getBrandHref,
   getBrandLogo,
@@ -29,6 +30,8 @@ import { createPortal } from "react-dom";
 interface Category {
   id: string;
   title: string;
+  /** Short label for menus; see OrganizedCategory.menuTitle. */
+  menuTitle?: string;
   handle: string;
   description?: string;
   image?: { url: string; altText?: string };
@@ -309,10 +312,10 @@ export function CategoryNav() {
 
     const sections = category.subCategories.map(
       (subCat) => ({
-        title: subCat.title,
+        title: categoryLabel(subCat),
         href: `/collections/${subCat.handle}`,
         items: subCat.subCategories.map((item) => ({
-          label: item.title,
+          label: categoryLabel(item),
           href: `/collections/${item.handle}`,
         })),
       })
@@ -599,7 +602,7 @@ export function CategoryNav() {
                               onClick={closeDropdown}
                               className="block text-[14px] font-medium text-[#222222] hover:text-brand-700"
                             >
-                              {child.title}
+                              {categoryLabel(child)}
                             </Link>
 
                             {child.subCategories.length >
@@ -614,7 +617,7 @@ export function CategoryNav() {
                                       onClick={closeDropdown}
                                       className="block text-[14px] font-normal leading-snug text-[#666666] hover:text-brand-700"
                                     >
-                                      {leaf.title}
+                                      {categoryLabel(leaf)}
                                     </Link>
                                   )
                                 )}
@@ -663,7 +666,7 @@ export function CategoryNav() {
                 {activeCategoryData.sections.map(
                   (section) => (
                     <div
-                      key={section.title}
+                      key={section.href}
                       className="min-w-0"
                     >
                       <h4 className="mb-1">
@@ -681,7 +684,7 @@ export function CategoryNav() {
                         {section.items.map(
                           (menuItem) => (
                             <Link
-                              key={menuItem.label}
+                              key={menuItem.href}
                               href={menuItem.href}
                               onClick={closeDropdown}
                               className="block cursor-pointer text-[14px] font-normal text-[#666666] transition-colors hover:text-brand-700"
