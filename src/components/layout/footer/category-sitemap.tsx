@@ -47,7 +47,8 @@ export async function CategorySitemap() {
                   href={`/collections/${group.handle}`}
                   className="text-xs font-semibold text-neutral-200 hover:text-white"
                 >
-                  {group.title}
+                  {/* Sits under its root, so the brand alone: "IMOU", not "IMOU Smart Home". */}
+                  {group.menuTitle}
                 </Link>
                 {group.subCategories.length > 0 && (
                   <ul className="mt-1 space-y-0.5">

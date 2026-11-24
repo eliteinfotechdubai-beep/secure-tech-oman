@@ -3,7 +3,15 @@ import { shopifyFetch } from './shopify-client';
 
 export interface OrganizedCategory {
   id: string;
+  /** Full Shopify title: page headings, SEO titles and the current breadcrumb step. */
   title: string;
+  /**
+   * Label for menus, the footer, filters and intermediate breadcrumbs, where the parent
+   * category is already shown. Brand collections titled "<Brand> <Parent>" (e.g. "IMOU
+   * Recorders & NVR" under "Recorders & NVR") get just the brand ("IMOU"); every other
+   * collection, and brand collections still titled with the bare brand, use the title.
+   */
+  menuTitle: string;
   handle: string;
   description?: string;
   image?: { url: string; altText?: string } | null;
@@ -75,9 +83,11 @@ interface CollectionNode {
 // copy is shared for 5 minutes: admin edits to categories show up within that time.
 const CATEGORY_TREE_REVALIDATE_SECONDS = 300;
 
+// The key is versioned with the tree's shape: a copy cached before `menuTitle` existed is
+// never served to code that reads it.
 const getCachedCategoryTree = unstable_cache(
   async () => buildCategoryTree(await fetchAllCollections()),
-  ['category-tree'],
+  ['category-tree-v2'],
   { revalidate: CATEGORY_TREE_REVALIDATE_SECONDS, tags: ['category-tree'] }
 );
 
@@ -179,7 +189,12 @@ function buildCategoryTree(collections: CollectionNode[]): OrganizedCategory[] {
   // Collections caught in a reference cycle are simply unreachable and reported below.
   const visited = new Set<string>();
 
-  const toCategory = (collection: CollectionNode, rootId: string): OrganizedCategory => {
+  // `parentTitle` is set only for a root's direct children: the brand level.
+  const toCategory = (
+    collection: CollectionNode,
+    rootId: string,
+    parentTitle?: string
+  ): OrganizedCategory => {
     visited.add(collection.id);
 
     const declaredRoot = collection.categoryLevel?.value?.trim();
@@ -192,14 +207,16 @@ function buildCategoryTree(collections: CollectionNode[]): OrganizedCategory[] {
     const orderValue = collection.order?.value;
     const order = orderValue ? parseInt(orderValue, 10) : undefined;
 
+    const isRoot = collection.id === rootId;
     const subCategories = (childrenByParentId.get(collection.id) ?? []).map((child) =>
-      toCategory(child, rootId)
+      toCategory(child, rootId, isRoot ? collection.title : undefined)
     );
     sortByOrder(subCategories);
 
     return {
       id: collection.id,
       title: collection.title,
+      menuTitle: parentTitle ? withoutParentSuffix(collection.title, parentTitle) : collection.title,
       handle: collection.handle,
       description: collection.description,
       image: collection.image ?? null,
@@ -224,6 +241,22 @@ function buildCategoryTree(collections: CollectionNode[]): OrganizedCategory[] {
   }
 
   return tree;
+}
+
+/**
+ * "IMOU Recorders & NVR" under "Recorders & NVR" -> "IMOU". A title that does not end with
+ * " <parent>" (case ignored), or would be left empty, is returned unchanged.
+ */
+export function withoutParentSuffix(title: string, parentTitle: string): string {
+  const trimmed = title.trim();
+  const suffix = ` ${parentTitle.trim()}`;
+
+  if (suffix.length > 1 && trimmed.toLowerCase().endsWith(suffix.toLowerCase())) {
+    const brand = trimmed.slice(0, -suffix.length).trim();
+    if (brand) return brand;
+  }
+
+  return title;
 }
 
 function sortByOrder(categories: OrganizedCategory[]): void {
