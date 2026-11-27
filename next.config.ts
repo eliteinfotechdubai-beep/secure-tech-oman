@@ -7,6 +7,8 @@ const RETIRED_URLS: Array<[source: string, destination: string]> = [
   ["/collections/storage-huawei-ssd-storage", "/collections/storage"],
   ["/collections/storage-uniarch-flash-memory", "/collections/storage"],
   ["/collections/storage-unv-surveillance-hard-drives", "/collections/storage"],
+  // The duplicate Cudy brand collection under Cables & Connectivity, merged into Networking > Cudy.
+  ["/collections/cables-connectivity-cudy", "/collections/networking-cudy"],
   ["/products/cctv-dhi-lm22-4", "/products/dahua-dhi-lm22-l200n-cctv-monitor"],
   ["/products/cctv-dhi-lm22-5", "/products/dahua-dhi-lm22-l200n-cctv-monitor"],
   ["/products/cctv-dhi-lm22-8", "/products/dahua-dhi-lm22-l200n-cctv-monitor"],
