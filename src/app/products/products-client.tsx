@@ -490,8 +490,6 @@ export function ProductsPageClient({
     !selectedSection;
   // The collection and brand pages hand over their <h1>; on /products the page keeps its own.
   const CategoryHeading = initialCollection || initialBrand ? "h1" : "h2";
-  // The collection page hands over its <h1>; on /products the page keeps its own.
-  const CategoryHeading = initialCollection ? "h1" : "h2";
 
   const selectedCategoryTitle = searchQuery
     ? `Search results for "${searchQuery}"`
