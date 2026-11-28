@@ -5,6 +5,8 @@ export const SITE_URL = "https://securetechoman.com";
 /** GA4 measurement ID from NEXT_PUBLIC_GA_ID. Unset means no analytics script loads and nothing is sent. */
 export const GA_MEASUREMENT_ID = process.env.NEXT_PUBLIC_GA_ID;
 
+export const PRODUCTS_PER_PAGE = 30;
+
 export const SITE_DESCRIPTION =
   "Secure Tech Oman is a leading IT hardware distributor, partnering with top storage, networking, and creative-hardware brands. We specialize in NAS storage solutions, high-performance HDDs/SSDs, NAS and SAN systems, UPS, servers, laptops, computers, desktops, and reliable data-backup products for corporates, resellers, and system integrators. Secure Tech Oman is a trusted computer hardware retailer.";
 
@@ -74,7 +76,7 @@ export const MARQUEE_PARTNERS: string[] = [
 ];
 
 export const SOCIAL_LINKS: Array<{ label: string; href: string; icon: "facebook" | "instagram" | "whatsapp" }> = [
-  { label: "Facebook", href: "#", icon: "facebook" },
-  { label: "Instagram", href: "#", icon: "instagram" },
+  { label: "Facebook", href: "https://www.facebook.com/profile.php?id=61596472376884", icon: "facebook" },
+  { label: "Instagram", href: "https://www.instagram.com/securetechoman/", icon: "instagram" },
   { label: "WhatsApp", href: "#", icon: "whatsapp" },
 ];
