@@ -216,3 +216,49 @@
 .collection-bottom-content li {
   @apply pl-1;
 }
+
+/* Brand page SEO copy (src/components/brand). The main heading is the section's <h2>, so the
+   section headings are <h3>s styled like the collection copy's <h2>s, and <h4>s keep the
+   collection copy's <h3> look. */
+.brand-seo-content h3 {
+  @apply text-2xl font-normal text-gray-900 mt-10 mb-3 lg:text-3xl;
+}
+
+/* FAQs as on /collections/access-control: small centred heading, bold question, answer. */
+.brand-seo-content .brand-seo-faq h3 {
+  @apply text-lg font-semibold text-center mt-6 mb-2;
+}
+
+.brand-seo-content .brand-seo-faq h4 {
+  @apply text-base font-bold text-gray-900 leading-relaxed mt-0 mb-3;
+}
+
+/* Tables scroll sideways inside their own box on narrow screens, never the page. */
+.brand-seo-table-wrap {
+  @apply my-6 w-full max-w-full overflow-x-auto rounded-lg border border-gray-200 bg-white;
+}
+
+.brand-seo-table-wrap table {
+  @apply w-full min-w-[20rem] border-collapse text-left text-sm;
+}
+
+.brand-seo-table-wrap table.brand-seo-table-wide {
+  @apply min-w-[38rem];
+}
+
+.brand-seo-table-wrap th,
+.brand-seo-table-wrap td {
+  @apply px-4 py-3 align-top leading-relaxed;
+}
+
+.brand-seo-table-wrap thead th {
+  @apply bg-gray-100 font-semibold text-gray-900;
+}
+
+.brand-seo-table-wrap tbody th {
+  @apply border-t border-gray-200 font-medium text-gray-900;
+}
+
+.brand-seo-table-wrap tbody td {
+  @apply border-t border-gray-200 text-gray-600;
+}

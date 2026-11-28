@@ -13,6 +13,7 @@ import {
   getBrandVendor,
 } from "@/components/layout/header/brand-menu-data";
 import { ProductsPageClient } from "@/app/products/products-client";
+import { getBrandSeoContent } from "@/components/brand/brand-seo-content";
 
 // Products are edited in the Shopify admin, so the product count (which decides indexing)
 // is read per request, like the collection pages.
@@ -93,8 +94,13 @@ export default async function BrandPage({ params, searchParams }: BrandPageProps
         ]}
       />
       <Suspense fallback={null}>
-        {/* The grid renders the visible <h1> (the brand name), so this page has no separate one. */}
-        <ProductsPageClient initialBrand={vendor} />
+        {/* The grid renders the visible <h1> (the brand name), so this page has no separate one.
+            Brand SEO copy, where a brand has some, is rendered here on the server and placed
+            by the grid below its products and pagination. */}
+        <ProductsPageClient
+          initialBrand={vendor}
+          initialBrandBottomContent={getBrandSeoContent(canonicalSlug)}
+        />
       </Suspense>
     </>
   );

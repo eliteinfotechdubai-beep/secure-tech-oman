@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
 import { ChevronDown, ChevronRight, Grid2X2, Grid3X3, List } from "lucide-react";
 import { ProductCard } from "@/components/product/product-card";
@@ -164,6 +164,11 @@ interface ProductsPageClientProps {
    * canonical way to scope the grid to a brand; ?brand= links redirect there.
    */
   initialBrand?: string;
+  /**
+   * Set by /brands/[slug] for a brand with its own SEO copy. Rendered on the server and
+   * shown below the grid and pagination while the grid is still scoped to that brand.
+   */
+  initialBrandBottomContent?: ReactNode;
 }
 
 export function ProductsPageClient({
@@ -172,6 +177,7 @@ export function ProductsPageClient({
   initialCollectionDescription,
   initialCollectionBottomContent,
   initialBrand,
+  initialBrandBottomContent,
 }: ProductsPageClientProps = {}) {
   const searchParams = useSearchParams();
   const collectionParam = initialCollection ?? searchParams.get("collection");
@@ -433,6 +439,14 @@ export function ProductsPageClient({
   const showCategoryHeader = !searchQuery && !selectedSection && Boolean(categoryTitle);
   const isDescriptionClamped =
     !!categoryDescription && categoryDescription.length > DESCRIPTION_CLAMP_LENGTH;
+  // A brand page's copy describes that brand, so it goes once the visitor picks a category
+  // or searches and the grid is showing something else.
+  const showBrandBottomContent =
+    Boolean(initialBrandBottomContent) &&
+    Boolean(initialBrand) &&
+    selectedBrand === initialBrand &&
+    !searchQuery &&
+    !selectedSection;
   // The collection and brand pages hand over their <h1>; on /products the page keeps its own.
   const CategoryHeading = initialCollection || initialBrand ? "h1" : "h2";
 
@@ -727,6 +741,9 @@ export function ProductsPageClient({
             />
           </section>
         )}
+
+        {/* The brand page's own copy (it brings its own section and divider) */}
+        {showBrandBottomContent && initialBrandBottomContent}
       </div>
     </div>
   );
