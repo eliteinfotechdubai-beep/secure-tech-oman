@@ -7,14 +7,20 @@ import { ProductCard } from "@/components/product/product-card";
 import { SkeletonProductGrid } from "@/components/product/skeleton-product-grid";
 import { toDisplayProduct } from "@/lib/shopify/to-display-product";
 import { gaItem, trackEvent } from "@/lib/analytics";
-import { fetchOrganizedCategories } from "@/lib/category-tree-client";
+import { PRODUCTS_PER_PAGE } from "@/lib/constants";
 import type { Product } from "@/lib/data/types";
 import type { CollectionBottomContent } from "@/lib/shopify/shopify-types";
-import { categoryLabel, findBrandCategory } from "@/components/layout/header/brand-menu-data";
 
 type ViewMode = "grid-2" | "grid-3" | "grid-4" | "list";
 
-const PRODUCTS_PER_PAGE = 30;
+// A merchant table in the bottom copy can be wider than a phone screen. Each one gets its own
+// horizontal scroll container, so the page itself never scrolls sideways.
+function wrapTables(html: string) {
+  return html.replace(
+    /<table[\s\S]*?<\/table>/gi,
+    (table) => `<div class="collection-table-scroll" tabindex="0">${table}</div>`
+  );
+}
 
 // Up to 5 page numbers, centered on the current page and clamped to the valid range.
 function getPageNumbers(currentPage: number, totalPages: number): number[] {
@@ -29,8 +35,6 @@ function getPageNumbers(currentPage: number, totalPages: number): number[] {
 interface Category {
   id: string;
   title: string;
-  /** Short label for the filter tree; see OrganizedCategory.menuTitle. */
-  menuTitle?: string;
   handle: string;
   description?: string;
   subCategories: Category[];
@@ -40,6 +44,9 @@ interface Category {
 // of them can be the selected one, so the lookup walks the whole branch rather than only
 // the roots. The whole path is returned, not just the match: the sidebar needs the
 // ancestors above the selection to know which branches to open.
+// A collection can now have more than one parent branch; this returns the first match found
+// depth-first, over each root's existing sort order (by `order` metafield, then title) - a
+// deliberate, documented tie-break, not an assumption that only one path exists.
 function findCategoryPath(categories: Category[], handle: string): Category[] {
   for (const category of categories) {
     if (category.handle === handle) return [category];
@@ -47,6 +54,22 @@ function findCategoryPath(categories: Category[], handle: string): Category[] {
     if (below.length > 0) return [category, ...below];
   }
   return [];
+}
+
+// Brand cards filter by Shopify's vendor field, which is a name rather than a handle, so
+// the collection mirroring that brand is found by title. The two are maintained
+// separately in the admin and their casing drifts ("IMOU" the vendor, "Imou" the
+// collection), so the comparison ignores it.
+// With multi-parent collections, this also returns the first depth-first match in sort order.
+function findCategoryByTitle(categories: Category[], title: string): Category | undefined {
+  const target = title.trim().toLowerCase();
+
+  for (const category of categories) {
+    if (category.title.trim().toLowerCase() === target) return category;
+    const match = findCategoryByTitle(category.subCategories ?? [], title);
+    if (match) return match;
+  }
+  return undefined;
 }
 
 // Past this, a Shopify description is long enough to push the grid below the fold, so it
@@ -101,16 +124,14 @@ function CategoryFilterItem({
               depth === 0 ? "text-gray-700 font-medium" : "text-gray-600 text-sm"
             }`}
           >
-            {categoryLabel(category)}
+            {category.title}
           </span>
         </label>
         {hasSubCategories && (
           <button
             type="button"
             onClick={() => onToggle(category.handle)}
-            aria-label={
-              isExpanded ? `Collapse ${categoryLabel(category)}` : `Expand ${categoryLabel(category)}`
-            }
+            aria-label={isExpanded ? `Collapse ${category.title}` : `Expand ${category.title}`}
             aria-expanded={isExpanded}
             className="shrink-0 p-1 text-gray-400 hover:text-gray-700 cursor-pointer"
           >
@@ -160,10 +181,13 @@ interface ProductsPageClientProps {
    */
   initialCollectionBottomContent?: CollectionBottomContent;
   /**
-   * Set by /brands/[slug]: the Shopify vendor the grid starts filtered by. The path is the
-   * canonical way to scope the grid to a brand; ?brand= links redirect there.
+   * The server-rendered first page of the grid, for the whole catalogue or a collection. Its
+   * product links are in the HTML, so search engines can follow them; the grid takes over from
+   * there for filtering and paging.
    */
-  initialBrand?: string;
+  initialProducts?: Product[];
+  initialTotalCount?: number;
+  initialTotalPages?: number;
 }
 
 export function ProductsPageClient({
@@ -171,13 +195,15 @@ export function ProductsPageClient({
   initialCollectionTitle,
   initialCollectionDescription,
   initialCollectionBottomContent,
-  initialBrand,
+  initialProducts,
+  initialTotalCount,
+  initialTotalPages,
 }: ProductsPageClientProps = {}) {
   const searchParams = useSearchParams();
   const collectionParam = initialCollection ?? searchParams.get("collection");
   const searchQuery = searchParams.get("q") || "";
-  // Set by the brand pages, or by older ?brand= links. Matched against Shopify's vendor field.
-  const brandParam = initialBrand || searchParams.get("brand") || "";
+  // Set by the brand cards on the homepage. Matched against Shopify's vendor field.
+  const brandParam = searchParams.get("brand") || "";
   // Set by a homepage section's "View All Products" link. A homepage_sections handle.
   const sectionParam = searchParams.get("section") || "";
 
@@ -198,14 +224,16 @@ export function ProductsPageClient({
   const [categories, setCategories] = useState<Category[]>([]);
   // `products` holds only the page being shown; the totals describe the whole filtered
   // set and come from Shopify's count rather than from the length of what was fetched.
-  const [products, setProducts] = useState<Product[]>([]);
-  const [totalCount, setTotalCount] = useState(0);
-  const [totalPages, setTotalPages] = useState(1);
-  const [isLoading, setIsLoading] = useState(true);
+  const [products, setProducts] = useState<Product[]>(initialProducts ?? []);
+  const [totalCount, setTotalCount] = useState(initialTotalCount ?? 0);
+  const [totalPages, setTotalPages] = useState(initialTotalPages ?? 1);
+  const [isLoading, setIsLoading] = useState(initialProducts === undefined);
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const latestRequest = useRef(0);
+  // The server already rendered the first page, so the first fetch on mount is skipped.
+  const skipFirstFetch = useRef(initialProducts !== undefined);
   const categoryListRef = useRef<HTMLDivElement | null>(null);
   const selectedCategoryRowRef = useRef<HTMLDivElement | null>(null);
 
@@ -241,7 +269,11 @@ export function ProductsPageClient({
   useEffect(() => {
     async function fetchCategories() {
       try {
-        setCategories(await fetchOrganizedCategories());
+        const response = await fetch("/api/collections/organized");
+        if (response.ok) {
+          const data = await response.json();
+          setCategories(data.data || []);
+        }
       } catch (error) {
         console.error("Error fetching categories:", error);
       }
@@ -267,6 +299,10 @@ export function ProductsPageClient({
   }
 
   useEffect(() => {
+    if (skipFirstFetch.current) {
+      skipFirstFetch.current = false;
+      return;
+    }
     // Only the newest request may write to state: pages and filters can change faster
     // than Shopify answers, and a slow earlier response must not land on a newer one.
     const request = ++latestRequest.current;
@@ -318,6 +354,16 @@ export function ProductsPageClient({
 
     fetchProducts();
   }, [selectedCategory, selectedBrand, selectedSection, searchQuery, currentPage]);
+
+  // The server-rendered first page is counted when it arrives; later pages are counted in the fetch.
+  useEffect(() => {
+    if (initialProducts) {
+      trackEvent("view_item_list", {
+        item_list_name: initialCollection ?? "all",
+        items: initialProducts.map(gaItem),
+      });
+    }
+  }, [initialProducts, initialCollection]);
 
   // Every search is counted once, whichever search box or shared link it came from.
   useEffect(() => {
@@ -397,23 +443,16 @@ export function ProductsPageClient({
   const selectedCategoryNode = selectedCategoryPath[selectedCategoryPath.length - 1];
 
   // A brand card narrows the grid by vendor, but nearly every brand is also a collection
-  // in the tree - "IMOU" sits under CCTV & Security Cameras. Pairing them by the brand
-  // label (not the full "IMOU CCTV & Security Cameras" title) lets a brand-filtered grid
-  // carry that collection's brand name and description.
+  // in the tree - "IMOU" sits under CCTV & Security Cameras. Pairing them by title lets a
+  // brand-filtered grid carry the same heading and description as that collection.
   const brandCategory = useMemo(
-    () => (selectedBrand ? findBrandCategory(categories, selectedBrand) : undefined),
+    () => (selectedBrand ? findCategoryByTitle(categories, selectedBrand) : undefined),
     [categories, selectedBrand]
   );
 
   // Whichever category the heading is describing. Brand and category filters replace one
   // another, so only one of these is ever set.
   const headingCategory = selectedBrand ? brandCategory : selectedCategoryNode;
-  // A brand page is headed by the brand ("IMOU"); a collection page by its full title.
-  const headingTitle = headingCategory
-    ? selectedBrand
-      ? categoryLabel(headingCategory)
-      : headingCategory.title
-    : undefined;
 
   // Until the tree arrives, a collection page can still name the category it was rendered
   // for. Once another category is picked, that server-supplied fallback no longer applies.
@@ -425,7 +464,7 @@ export function ProductsPageClient({
   const fallbackDescription =
     !selectedBrand && isInitialCollection ? initialCollectionDescription : undefined;
 
-  const categoryTitle = headingTitle ?? fallbackTitle;
+  const categoryTitle = headingCategory?.title ?? fallbackTitle;
   const categoryDescription = (headingCategory?.description ?? fallbackDescription)?.trim();
 
   // A search, or a homepage section, is showing something assembled from across the
@@ -433,8 +472,8 @@ export function ProductsPageClient({
   const showCategoryHeader = !searchQuery && !selectedSection && Boolean(categoryTitle);
   const isDescriptionClamped =
     !!categoryDescription && categoryDescription.length > DESCRIPTION_CLAMP_LENGTH;
-  // The collection and brand pages hand over their <h1>; on /products the page keeps its own.
-  const CategoryHeading = initialCollection || initialBrand ? "h1" : "h2";
+  // The collection page hands over its <h1>; on /products the page keeps its own.
+  const CategoryHeading = initialCollection ? "h1" : "h2";
 
   const selectedCategoryTitle = searchQuery
     ? `Search results for "${searchQuery}"`
@@ -673,38 +712,34 @@ export function ProductsPageClient({
               </div>
             )}
 
-            {/* Pagination. One row of Previous / 1-5 / Next was ~450px wide, wider than a phone,
-                so on small screens the page numbers get their own row with Previous and Next
-                below it. From `sm` up the `sm:` classes restore the original single row. */}
+            {/* Pagination */}
             {totalPages > 1 && (
-              <div className="mt-8 flex flex-wrap items-center justify-center gap-2">
+              <div className="mt-8 flex items-center justify-center gap-2">
                 <button
                   onClick={() => goToPage(safePage - 1)}
                   disabled={safePage === 1}
-                  className="order-2 sm:order-none px-4 py-2 border border-gray-300 rounded hover:bg-gray-100 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-white"
+                  className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-100 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-white"
                 >
                   Previous
                 </button>
-                <div className="order-1 flex w-full flex-wrap items-center justify-center gap-2 sm:order-none sm:w-auto">
-                  {getPageNumbers(safePage, totalPages).map((page) => (
-                    <button
-                      key={page}
-                      onClick={() => goToPage(page)}
-                      aria-current={page === safePage ? "page" : undefined}
-                      className={`px-3 sm:px-4 py-2 rounded cursor-pointer ${
-                        page === safePage
-                          ? "bg-brand-gradient text-white"
-                          : "border border-gray-300 hover:bg-gray-100"
-                      }`}
-                    >
-                      {page}
-                    </button>
-                  ))}
-                </div>
+                {getPageNumbers(safePage, totalPages).map((page) => (
+                  <button
+                    key={page}
+                    onClick={() => goToPage(page)}
+                    aria-current={page === safePage ? "page" : undefined}
+                    className={`px-4 py-2 rounded cursor-pointer ${
+                      page === safePage
+                        ? "bg-brand-gradient text-white"
+                        : "border border-gray-300 hover:bg-gray-100"
+                    }`}
+                  >
+                    {page}
+                  </button>
+                ))}
                 <button
                   onClick={() => goToPage(safePage + 1)}
                   disabled={safePage === totalPages}
-                  className="order-3 sm:order-none px-4 py-2 border border-gray-300 rounded hover:bg-gray-100 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-white"
+                  className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-100 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-white"
                 >
                   Next
                 </button>
@@ -723,7 +758,7 @@ export function ProductsPageClient({
             )}
             <div
               className="shopify-rich-text collection-bottom-content"
-              dangerouslySetInnerHTML={{ __html: bottomContent.html }}
+              dangerouslySetInnerHTML={{ __html: wrapTables(bottomContent.html) }}
             />
           </section>
         )}
