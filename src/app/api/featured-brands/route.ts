@@ -1,5 +1,7 @@
 import { shopifyFetch } from '@/lib/shopify/shopify-client';
 import { NO_CACHE_HEADERS } from '@/lib/http/no-cache';
+// Brand pages
+import { findBrandByName, getBrandHref } from '@/components/layout/header/brand-menu-data';
 
 // Featured brands are edited in the Shopify admin and must show up immediately, so this
 // route stays out of the build-time prerender, the ISR cache and the Data Cache.
@@ -49,6 +51,8 @@ export async function GET() {
 
       const name = fieldsMap.get('brand_name')?.value;
       const link = fieldsMap.get('brand_link')?.value;
+      // One of the 28 brands with its own /brands/<slug> page ("Hang" is Haing's card).
+      const brand = name ? findBrandByName(name) : undefined;
 
       return {
         category: fieldsMap.get('category')?.value || 'Uncategorized',
@@ -58,7 +62,11 @@ export async function GET() {
         // brand_name drives the link so every card lands on that brand's products.
         // brand_link is only a fallback for a metaobject with no brand_name, because
         // the links set in the admin today point at the unfiltered /products page.
-        href: name ? `/products?brand=${encodeURIComponent(name)}` : link || '#',
+        href: brand
+          ? getBrandHref(brand)
+          : name
+            ? `/products?brand=${encodeURIComponent(name)}`
+            : link || '#',
         order: parseInt(fieldsMap.get('display_order')?.value || '0'),
       };
     });

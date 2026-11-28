@@ -11,7 +11,7 @@ export const metadata: Metadata = {
 export default function ContactPage() {
   return (
     <div className="min-h-screen bg-gray-50">
-      <Breadcrumb items={[{ label: "Home", href: "/" }, { label: "Contact" }]} />
+      <Breadcrumb items={[{ label: "Contact", href: "/contact" }]} />
       <div className="mx-auto max-w-3xl px-8 lg:px-28 py-12">
         <h1 className="text-3xl font-bold text-gray-900 mb-6">Contact Us</h1>
         <div className="space-y-4 text-gray-700 leading-relaxed">

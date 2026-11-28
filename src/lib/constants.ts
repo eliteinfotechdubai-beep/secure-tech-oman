@@ -74,7 +74,7 @@ export const MARQUEE_PARTNERS: string[] = [
 ];
 
 export const SOCIAL_LINKS: Array<{ label: string; href: string; icon: "facebook" | "instagram" | "whatsapp" }> = [
-  { label: "Facebook", href: "#", icon: "facebook" },
-  { label: "Instagram", href: "#", icon: "instagram" },
+  { label: "Facebook", href: "https://www.facebook.com/profile.php?id=61596472376884", icon: "facebook" },
+  { label: "Instagram", href: "https://www.instagram.com/securetechoman/", icon: "instagram" },
   { label: "WhatsApp", href: "#", icon: "whatsapp" },
 ];

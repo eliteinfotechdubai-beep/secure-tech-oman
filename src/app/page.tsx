@@ -1,4 +1,6 @@
+
 import { Fragment } from "react";
+import type { Metadata } from "next";
 import { GET as getHomepageSections, type HomePageSection } from "@/app/api/homepage-sections/route";
 import { getProductsByQuery } from "@/lib/shopify/shopify-products";
 import { toDisplayProduct } from "@/lib/shopify/to-display-product";
@@ -8,6 +10,36 @@ import { ShopByCategory } from "@/components/homepage/shop-by-category/shop-by-c
 import { ProductSection } from "@/components/homepage/product-section/product-section";
 import { PromoBanners } from "@/components/homepage/promo-banners/promo-banners";
 import { FeaturedProducts } from "@/components/homepage/featured-products/featured-products";
+import { SITE_URL } from "@/lib/constants";
+
+const seoTitle =
+  "IT Hardware & Security Solutions Supplier | Secure Tech Oman";
+
+const seoDescription =
+  "Secure Tech Oman supplies IT hardware, CCTV cameras, NAS storage, HDDs, SSDs and networking products for businesses, resellers and system integrators in Oman.";
+
+export const metadata: Metadata = {
+  title: {
+    absolute: seoTitle,
+  },
+  description: seoDescription,
+  alternates: {
+    canonical: `${SITE_URL}/`,
+  },
+  openGraph: {
+    type: "website",
+    siteName: "Secure Tech Oman",
+    title: seoTitle,
+    description: seoDescription,
+    url: `${SITE_URL}/`,
+    locale: "en_US",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: seoTitle,
+    description: seoDescription,
+  },
+};
 
 export default async function HomePage() {
   const homepageSectionsRes = await getHomepageSections();

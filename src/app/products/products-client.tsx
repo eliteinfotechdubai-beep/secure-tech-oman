@@ -7,8 +7,10 @@ import { ProductCard } from "@/components/product/product-card";
 import { SkeletonProductGrid } from "@/components/product/skeleton-product-grid";
 import { toDisplayProduct } from "@/lib/shopify/to-display-product";
 import { gaItem, trackEvent } from "@/lib/analytics";
+import { fetchOrganizedCategories } from "@/lib/category-tree-client";
 import type { Product } from "@/lib/data/types";
 import type { CollectionBottomContent } from "@/lib/shopify/shopify-types";
+import { categoryLabel, findBrandCategory } from "@/components/layout/header/brand-menu-data";
 
 type ViewMode = "grid-2" | "grid-3" | "grid-4" | "list";
 
@@ -27,6 +29,8 @@ function getPageNumbers(currentPage: number, totalPages: number): number[] {
 interface Category {
   id: string;
   title: string;
+  /** Short label for the filter tree; see OrganizedCategory.menuTitle. */
+  menuTitle?: string;
   handle: string;
   description?: string;
   subCategories: Category[];
@@ -43,21 +47,6 @@ function findCategoryPath(categories: Category[], handle: string): Category[] {
     if (below.length > 0) return [category, ...below];
   }
   return [];
-}
-
-// Brand cards filter by Shopify's vendor field, which is a name rather than a handle, so
-// the collection mirroring that brand is found by title. The two are maintained
-// separately in the admin and their casing drifts ("IMOU" the vendor, "Imou" the
-// collection), so the comparison ignores it.
-function findCategoryByTitle(categories: Category[], title: string): Category | undefined {
-  const target = title.trim().toLowerCase();
-
-  for (const category of categories) {
-    if (category.title.trim().toLowerCase() === target) return category;
-    const match = findCategoryByTitle(category.subCategories ?? [], title);
-    if (match) return match;
-  }
-  return undefined;
 }
 
 // Past this, a Shopify description is long enough to push the grid below the fold, so it
@@ -112,14 +101,16 @@ function CategoryFilterItem({
               depth === 0 ? "text-gray-700 font-medium" : "text-gray-600 text-sm"
             }`}
           >
-            {category.title}
+            {categoryLabel(category)}
           </span>
         </label>
         {hasSubCategories && (
           <button
             type="button"
             onClick={() => onToggle(category.handle)}
-            aria-label={isExpanded ? `Collapse ${category.title}` : `Expand ${category.title}`}
+            aria-label={
+              isExpanded ? `Collapse ${categoryLabel(category)}` : `Expand ${categoryLabel(category)}`
+            }
             aria-expanded={isExpanded}
             className="shrink-0 p-1 text-gray-400 hover:text-gray-700 cursor-pointer"
           >
@@ -168,6 +159,11 @@ interface ProductsPageClientProps {
    * server-rendered page, where search engines read it, rather than arriving with the grid.
    */
   initialCollectionBottomContent?: CollectionBottomContent;
+  /**
+   * Set by /brands/[slug]: the Shopify vendor the grid starts filtered by. The path is the
+   * canonical way to scope the grid to a brand; ?brand= links redirect there.
+   */
+  initialBrand?: string;
 }
 
 export function ProductsPageClient({
@@ -175,12 +171,13 @@ export function ProductsPageClient({
   initialCollectionTitle,
   initialCollectionDescription,
   initialCollectionBottomContent,
+  initialBrand,
 }: ProductsPageClientProps = {}) {
   const searchParams = useSearchParams();
   const collectionParam = initialCollection ?? searchParams.get("collection");
   const searchQuery = searchParams.get("q") || "";
-  // Set by the brand cards on the homepage. Matched against Shopify's vendor field.
-  const brandParam = searchParams.get("brand") || "";
+  // Set by the brand pages, or by older ?brand= links. Matched against Shopify's vendor field.
+  const brandParam = initialBrand || searchParams.get("brand") || "";
   // Set by a homepage section's "View All Products" link. A homepage_sections handle.
   const sectionParam = searchParams.get("section") || "";
 
@@ -244,11 +241,7 @@ export function ProductsPageClient({
   useEffect(() => {
     async function fetchCategories() {
       try {
-        const response = await fetch("/api/collections/organized");
-        if (response.ok) {
-          const data = await response.json();
-          setCategories(data.data || []);
-        }
+        setCategories(await fetchOrganizedCategories());
       } catch (error) {
         console.error("Error fetching categories:", error);
       }
@@ -404,16 +397,23 @@ export function ProductsPageClient({
   const selectedCategoryNode = selectedCategoryPath[selectedCategoryPath.length - 1];
 
   // A brand card narrows the grid by vendor, but nearly every brand is also a collection
-  // in the tree - "IMOU" sits under CCTV & Security Cameras. Pairing them by title lets a
-  // brand-filtered grid carry the same heading and description as that collection.
+  // in the tree - "IMOU" sits under CCTV & Security Cameras. Pairing them by the brand
+  // label (not the full "IMOU CCTV & Security Cameras" title) lets a brand-filtered grid
+  // carry that collection's brand name and description.
   const brandCategory = useMemo(
-    () => (selectedBrand ? findCategoryByTitle(categories, selectedBrand) : undefined),
+    () => (selectedBrand ? findBrandCategory(categories, selectedBrand) : undefined),
     [categories, selectedBrand]
   );
 
   // Whichever category the heading is describing. Brand and category filters replace one
   // another, so only one of these is ever set.
   const headingCategory = selectedBrand ? brandCategory : selectedCategoryNode;
+  // A brand page is headed by the brand ("IMOU"); a collection page by its full title.
+  const headingTitle = headingCategory
+    ? selectedBrand
+      ? categoryLabel(headingCategory)
+      : headingCategory.title
+    : undefined;
 
   // Until the tree arrives, a collection page can still name the category it was rendered
   // for. Once another category is picked, that server-supplied fallback no longer applies.
@@ -425,7 +425,7 @@ export function ProductsPageClient({
   const fallbackDescription =
     !selectedBrand && isInitialCollection ? initialCollectionDescription : undefined;
 
-  const categoryTitle = headingCategory?.title ?? fallbackTitle;
+  const categoryTitle = headingTitle ?? fallbackTitle;
   const categoryDescription = (headingCategory?.description ?? fallbackDescription)?.trim();
 
   // A search, or a homepage section, is showing something assembled from across the
@@ -433,8 +433,8 @@ export function ProductsPageClient({
   const showCategoryHeader = !searchQuery && !selectedSection && Boolean(categoryTitle);
   const isDescriptionClamped =
     !!categoryDescription && categoryDescription.length > DESCRIPTION_CLAMP_LENGTH;
-  // The collection page hands over its <h1>; on /products the page keeps its own.
-  const CategoryHeading = initialCollection ? "h1" : "h2";
+  // The collection and brand pages hand over their <h1>; on /products the page keeps its own.
+  const CategoryHeading = initialCollection || initialBrand ? "h1" : "h2";
 
   const selectedCategoryTitle = searchQuery
     ? `Search results for "${searchQuery}"`
@@ -673,34 +673,38 @@ export function ProductsPageClient({
               </div>
             )}
 
-            {/* Pagination */}
+            {/* Pagination. One row of Previous / 1-5 / Next was ~450px wide, wider than a phone,
+                so on small screens the page numbers get their own row with Previous and Next
+                below it. From `sm` up the `sm:` classes restore the original single row. */}
             {totalPages > 1 && (
-              <div className="mt-8 flex items-center justify-center gap-2">
+              <div className="mt-8 flex flex-wrap items-center justify-center gap-2">
                 <button
                   onClick={() => goToPage(safePage - 1)}
                   disabled={safePage === 1}
-                  className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-100 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-white"
+                  className="order-2 sm:order-none px-4 py-2 border border-gray-300 rounded hover:bg-gray-100 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-white"
                 >
                   Previous
                 </button>
-                {getPageNumbers(safePage, totalPages).map((page) => (
-                  <button
-                    key={page}
-                    onClick={() => goToPage(page)}
-                    aria-current={page === safePage ? "page" : undefined}
-                    className={`px-4 py-2 rounded cursor-pointer ${
-                      page === safePage
-                        ? "bg-brand-gradient text-white"
-                        : "border border-gray-300 hover:bg-gray-100"
-                    }`}
-                  >
-                    {page}
-                  </button>
-                ))}
+                <div className="order-1 flex w-full flex-wrap items-center justify-center gap-2 sm:order-none sm:w-auto">
+                  {getPageNumbers(safePage, totalPages).map((page) => (
+                    <button
+                      key={page}
+                      onClick={() => goToPage(page)}
+                      aria-current={page === safePage ? "page" : undefined}
+                      className={`px-3 sm:px-4 py-2 rounded cursor-pointer ${
+                        page === safePage
+                          ? "bg-brand-gradient text-white"
+                          : "border border-gray-300 hover:bg-gray-100"
+                      }`}
+                    >
+                      {page}
+                    </button>
+                  ))}
+                </div>
                 <button
                   onClick={() => goToPage(safePage + 1)}
                   disabled={safePage === totalPages}
-                  className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-100 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-white"
+                  className="order-3 sm:order-none px-4 py-2 border border-gray-300 rounded hover:bg-gray-100 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-white"
                 >
                   Next
                 </button>

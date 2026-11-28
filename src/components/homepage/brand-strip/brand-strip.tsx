@@ -1,4 +1,5 @@
 
+
 import Image from "next/image";
 
 const brandLogos = [
@@ -8,6 +9,14 @@ const brandLogos = [
   { name: "Hikvision", src: "/brands/hikvision.webp" },
   { name: "Eufy", src: "/brands/eufy.webp" },
   { name: "Tapo", src: "/brands/tapo.webp" },
+
+  // Additional 6 brands
+  { name: "Seagate", src: "/brands/seagate.webp" },
+  { name: "WD", src: "/brands/wd.webp" },
+  { name: "Toshiba", src: "/brands/toshiba.webp" },
+  { name: "Grandstream", src: "/brands/grandstream.webp" },
+  { name: "Ubiquiti", src: "/brands/ubiquiti.webp" },
+  { name: "Ruijie", src: "/brands/ruijie.webp" },
 ];
 
 export function BrandStrip() {
@@ -43,7 +52,7 @@ export function BrandStrip() {
 
       <style>{`
         .brand-scroll-track {
-          animation: brand-scroll 25s linear infinite;
+          animation: brand-scroll 50s linear infinite;
         }
 
         .brand-scroll-track:hover {

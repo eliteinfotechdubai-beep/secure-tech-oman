@@ -9,6 +9,7 @@ import { Logo } from "@/components/layout/logo";
 import { MobileMenu } from "@/components/layout/header/mobile-menu";
 import { useProductSearch } from "@/hooks/use-product-search";
 import { pickProductImage } from "@/lib/product-image";
+import { fetchOrganizedCategories } from "@/lib/category-tree-client";
 
 interface ParentCategory {
   id: string;
@@ -26,11 +27,7 @@ export function SiteHeader() {
   useEffect(() => {
     async function fetchCategories() {
       try {
-        const response = await fetch("/api/collections/organized");
-        if (response.ok) {
-          const data = await response.json();
-          setCategories(data.data || []);
-        }
+        setCategories(await fetchOrganizedCategories<ParentCategory>());
       } catch (error) {
         console.error("Error fetching categories:", error);
       }

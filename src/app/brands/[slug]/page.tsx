@@ -1,0 +1,101 @@
+import type { Metadata } from "next";
+import { notFound, permanentRedirect } from "next/navigation";
+import { Suspense } from "react";
+import { Breadcrumb } from "@/components/layout/breadcrumb";
+import { SITE_URL } from "@/lib/constants";
+import { getCategoryTree } from "@/lib/shopify/category-tree";
+import { getVendorProductCount } from "@/lib/shopify/brand-products";
+import {
+  buildBrandCollections,
+  findBrandBySlug,
+  getBrandPreview,
+  getBrandSlug,
+  getBrandVendor,
+} from "@/components/layout/header/brand-menu-data";
+import { ProductsPageClient } from "@/app/products/products-client";
+
+// Products are edited in the Shopify admin, so the product count (which decides indexing)
+// is read per request, like the collection pages.
+export const dynamic = "force-dynamic";
+
+type BrandPageProps = {
+  params: Promise<{ slug: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+};
+
+// The query string again, so a redirect to the canonical slug keeps tracking parameters.
+function toQueryString(searchParams: Record<string, string | string[] | undefined>) {
+  const query = new URLSearchParams();
+
+  for (const [key, value] of Object.entries(searchParams)) {
+    for (const item of Array.isArray(value) ? value : [value]) {
+      if (item !== undefined) query.append(key, item);
+    }
+  }
+
+  const text = query.toString();
+  return text ? `?${text}` : "";
+}
+
+export async function generateMetadata({ params }: BrandPageProps): Promise<Metadata> {
+  const { slug } = await params;
+  const brand = findBrandBySlug(slug);
+  // Unknown slugs 404 and alias slugs redirect, so neither needs metadata.
+  if (!brand || getBrandSlug(brand) !== slug) return {};
+
+  const vendor = getBrandVendor(brand);
+  const [count, categories] = await Promise.all([
+    getVendorProductCount(vendor),
+    // The tree only feeds the description; getCategoryTree shares one cached copy with the
+    // footer and menus, so this adds no Shopify request of its own.
+    getCategoryTree().catch(() => []),
+  ]);
+
+  // Shopify collection description where one is set, otherwise a sentence built from the
+  // brand's categories: the same text as the Brands menu preview panel.
+  const { description } = getBrandPreview(
+    brand,
+    new Map(),
+    buildBrandCollections(categories),
+    vendor
+  );
+
+  return {
+    title: `${vendor} Products in Oman`,
+    description,
+    alternates: { canonical: `${SITE_URL}/brands/${slug}` },
+    // An empty brand stays reachable from the menus but out of search results until it has
+    // products. A failed count (null) keeps the default, so an outage cannot de-index a brand.
+    ...(count === 0 ? { robots: { index: false, follow: true } } : {}),
+  };
+}
+
+export default async function BrandPage({ params, searchParams }: BrandPageProps) {
+  const { slug } = await params;
+  const brand = findBrandBySlug(slug);
+  if (!brand) notFound();
+
+  // /brands/wd, /brands/Dahua and the like move permanently to the one canonical slug.
+  const canonicalSlug = getBrandSlug(brand);
+  if (slug !== canonicalSlug) {
+    permanentRedirect(`/brands/${canonicalSlug}${toQueryString(await searchParams)}`);
+  }
+
+  const vendor = getBrandVendor(brand);
+
+  return (
+    <>
+      {/* Home / Products / Brand: visible trail and BreadcrumbList come from this one list. */}
+      <Breadcrumb
+        items={[
+          { label: "Products", href: "/products" },
+          { label: vendor, href: `/brands/${canonicalSlug}` },
+        ]}
+      />
+      <Suspense fallback={null}>
+        {/* The grid renders the visible <h1> (the brand name), so this page has no separate one. */}
+        <ProductsPageClient initialBrand={vendor} />
+      </Suspense>
+    </>
+  );
+}

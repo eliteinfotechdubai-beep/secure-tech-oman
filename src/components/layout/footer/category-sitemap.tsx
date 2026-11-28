@@ -1,10 +1,26 @@
 import Link from "next/link";
+import { unstable_rethrow } from "next/navigation";
+import { connection } from "next/server";
 import { getCategoryTree } from "@/lib/shopify/category-tree";
 
 // Server-rendered so every category/subcategory link is crawlable straight out of the
 // initial HTML — the point of this section is SEO coverage, not interactivity.
 export async function CategorySitemap() {
-  const categories = await getCategoryTree();
+  // The footer's uncached Shopify fetch used to make every page render per request. The
+  // tree is now cached (see category-tree.ts), which would silently turn pages static/ISR,
+  // so keep rendering them per request exactly as before.
+  await connection();
+
+  let categories: Awaited<ReturnType<typeof getCategoryTree>>;
+  try {
+    categories = await getCategoryTree();
+  } catch (error) {
+    // This sits in the root layout, so a throw here would turn a brief Shopify outage into
+    // an HTTP 500 for every page. Leave the section out for this request instead.
+    unstable_rethrow(error);
+    console.error("[footer] Category sitemap unavailable:", error);
+    return null;
+  }
 
   if (categories.length === 0) return null;
 
@@ -31,7 +47,8 @@ export async function CategorySitemap() {
                   href={`/collections/${group.handle}`}
                   className="text-xs font-semibold text-neutral-200 hover:text-white"
                 >
-                  {group.title}
+                  {/* Sits under its root, so the brand alone: "IMOU", not "IMOU Smart Home". */}
+                  {group.menuTitle}
                 </Link>
                 {group.subCategories.length > 0 && (
                   <ul className="mt-1 space-y-0.5">
